@@ -1,0 +1,106 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Cross-platform desktop shell for the official DeepSeek Harness Web application.",
+  "version": "0.1.0-rc.6",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/desktop"
+  },
+  "type": "module",
+  "main": "src/main.mjs",
+  "files": [
+    "src/main.mjs",
+    "scripts/prepare-runtime.mjs",
+    "resources"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron .",
+    "build": "pnpm --dir ../.. run build",
+    "prepare-runtime": "node scripts/prepare-runtime.mjs",
+    "package:dir": "pnpm run build && pnpm run prepare-runtime && electron-builder --dir",
+    "package:win": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis portable",
+    "package:mac": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg zip",
+    "package:all": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis portable --mac dmg zip"
+  },
+  "devDependencies": {
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "ai.deepseek.harness",
+    "productName": "DeepSeek Harness",
+    "artifactName": "DeepSeek-Harness-${version}-${os}-${arch}.${ext}",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "../../release/desktop",
+      "buildResources": "resources"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "runtime",
+        "to": "runtime",
+        "filter": [
+          "package.json",
+          "pnpm-workspace.yaml"
+        ]
+      },
+      {
+        "from": "runtime/node_modules",
+        "to": "runtime/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "resources/icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "artifactName": "DeepSeek-Harness-Setup-${version}-${os}-${arch}.${ext}",
+      "include": "resources/installer.nsh",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DeepSeek Harness"
+    },
+    "portable": {
+      "artifactName": "DeepSeek-Harness-Portable-${version}-${os}-${arch}.${ext}"
+    },
+    "mac": {
+      "icon": "resources/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true
+    },
+    "dmg": {
+      "writeUpdateInfo": false
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development"
+    }
+  }
+}

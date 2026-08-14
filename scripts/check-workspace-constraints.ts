@@ -39,6 +39,7 @@ const publicLandlockPackages = new Set([
 /** Deliberate source payloads whose exact bytes are part of the package's audit surface. */
 const publicationSourceAllowlist: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/node-addon-landlock-run': ['src/main.c'],
+  '@deepseek-ai/dsh-desktop': ['src/main.mjs'],
 }
 const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.git'
 /**
@@ -56,6 +57,8 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
   '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
+  '@deepseek-ai/dsh-desktop': ['src/main.mjs', 'scripts/prepare-runtime.mjs', 'resources'],
+  '@deepseek-ai/dsh-desktop-runtime': [],
 }
 
 /** The subset of package.json fields this constraint check cares about. */
