@@ -53,9 +53,25 @@ jobs:
       - name: Verify artifact architecture
         run: |
           set -euo pipefail
-          test -f release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg
-          file release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg
-          shasum -a 256 release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg | tee release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg.sha256
+          artifact=DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg
+          artifact_dir=release/desktop
+          mount_dir="$RUNNER_TEMP/deepseek-harness-dmg"
+          test -f "$artifact_dir/$artifact"
+          mkdir -p "$mount_dir"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount_dir" "$artifact_dir/$artifact"
+          trap 'hdiutil detach "$mount_dir" >/dev/null 2>&1 || true' EXIT
+          executable="$mount_dir/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness"
+          test -x "$executable"
+          architectures="$(lipo -archs "$executable")"
+          echo "Packaged executable architectures: $architectures"
+          grep -qw arm64 <<< "$architectures"
+          if [[ " $architectures " == *" x86_64 "* ]]; then
+            echo "::error::Expected a native arm64-only executable, found: $architectures"
+            exit 1
+          fi
+          hdiutil detach "$mount_dir"
+          trap - EXIT
+          (cd "$artifact_dir" && shasum -a 256 "$artifact" | tee "$artifact.sha256")
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
