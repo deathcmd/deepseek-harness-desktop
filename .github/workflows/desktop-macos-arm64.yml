@@ -1,0 +1,77 @@
+name: Build Apple Silicon macOS installer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/desktop-macos-arm64.yml'
+      - 'apps/**'
+      - 'packages/**'
+      - 'native/**'
+      - 'vendor/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-macos-arm64
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  RELEASE_TAG: desktop-macos-v0.1.0-rc.7
+
+jobs:
+  build:
+    name: Build macOS arm64 DMG
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Apple Silicon DMG
+        run: pnpm --dir apps/desktop run package:mac-arm64
+
+      - name: Verify artifact architecture
+        run: |
+          set -euo pipefail
+          test -f release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg
+          file release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg
+          shasum -a 256 release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg | tee release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg.sha256
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: DeepSeek-Harness-0.1.0-rc.7-mac-arm64
+          path: |
+            release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg
+            release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg.sha256
+          if-no-files-found: error
+
+      - name: Attach DMG to macOS Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg
+            release/desktop/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg.sha256
+          fail_on_unmatched_files: true
+          overwrite_files: true

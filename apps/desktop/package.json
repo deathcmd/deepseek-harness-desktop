@@ -25,6 +25,8 @@
     "package:dir": "pnpm run build && pnpm run prepare-runtime && electron-builder --dir",
     "package:win": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis",
     "package:mac": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg zip",
+    "package:mac-x64": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg --x64",
+    "package:mac-arm64": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg --arm64",
     "package:all": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis --mac dmg zip"
   },
   "devDependencies": {

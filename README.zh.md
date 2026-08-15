@@ -9,7 +9,7 @@
 ## 一分钟开始
 
 1. 在“下载”表格中选择与你的电脑匹配的安装程序。
-2. Windows 双击 `.exe` 安装；Intel Mac 打开 `.dmg` 并把应用拖入“应用程序”。
+2. Windows 双击 `.exe` 安装；Intel Mac 或 Apple Silicon（M 系列）Mac 打开对应 `.dmg` 并把应用拖入“应用程序”。
 3. 启动桌面应用，在窗口内先选择工作区，再在“设置 → 模型”中填写自己的 API 密钥并选择模型。
 4. 新建会话，输入任务并发送；需要授权时先阅读操作内容，再决定是否允许。
 
@@ -20,9 +20,10 @@
 | 系统 | 安装文件 | 适用电脑 | 下载 |
 | --- | --- | --- | --- |
 | Windows | `DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe` | Windows 10/11 64 位（Intel 或 AMD） | [下载 Windows 安装程序](https://github.com/deathcmd/deepseek-harness-desktop/releases/download/desktop-v0.1.0-rc.7/DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe) |
-| macOS | `DeepSeek-Harness-0.1.0-rc.7-mac-x64.dmg` | Intel x64 Mac | [下载 macOS 安装程序](https://github.com/deathcmd/deepseek-harness-desktop/releases/download/desktop-macos-v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-mac-x64.dmg) |
+| macOS | `DeepSeek-Harness-0.1.0-rc.7-mac-x64.dmg` | Intel x64 Mac | [下载 macOS Intel 安装程序](https://github.com/deathcmd/deepseek-harness-desktop/releases/download/desktop-macos-v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-mac-x64.dmg) |
+| macOS | `DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg` | Apple Silicon（M1/M2/M3/M4 等）Mac | [下载 macOS Apple Silicon 安装程序](https://github.com/deathcmd/deepseek-harness-desktop/releases/download/desktop-macos-v0.1.0-rc.7/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg) |
 
-完整文件列表和 Release 说明见：[GitHub Releases](https://github.com/deathcmd/deepseek-harness-desktop/releases)。当前仓库没有发布 Apple Silicon 原生 arm64 安装包；在“关于本机”里显示“芯片 Apple”时，请先确认该版本是否适合你的系统。
+完整文件列表和 Release 说明见：[GitHub Releases](https://github.com/deathcmd/deepseek-harness-desktop/releases)。Apple Silicon 安装包是原生 arm64 版本，不需要 Rosetta 2；在“关于本机”里显示“芯片 Apple”时请选择上面的 `mac-arm64.dmg`。
 
 安装包只包含程序本身，不包含任何人的 API Key、模型凭据、全局提示词、MCP 配置或个人 skill。不要把自己的密钥写进 README、截图、公开仓库或发给其他人。
 
@@ -67,18 +68,18 @@ F1858EBBA2A1C3340703D65B5BBD5704705488E1664B1612C6B21F087C77A36D
 
 ### 兼容性
 
-当前公开的 macOS 安装程序是 Intel x64 版本。点击左上角苹果菜单 →“关于本机”：如果处理器一栏显示“Intel”，可以按下面步骤安装；如果显示“Apple M1/M2/M3/M4”等 Apple 芯片，当前 Release 没有原生 arm64 安装包。
+当前同时提供 Intel x64 和 Apple Silicon arm64 两个原生 macOS 安装程序。点击左上角苹果菜单 →“关于本机”：处理器一栏显示“Intel”时下载 `mac-x64.dmg`；显示“芯片 Apple M1/M2/M3/M4”等时下载 `mac-arm64.dmg`。不要把两个架构的文件混用。
 
 ### 逐步安装
 
-1. 点击上面“下载 macOS 安装程序”，等待 `DeepSeek-Harness-0.1.0-rc.7-mac-x64.dmg` 下载完成。
+1. 根据“关于本机”的结果，点击上面的 Intel 或 Apple Silicon 下载链接，等待对应的 `.dmg` 下载完成。
 2. 双击 `.dmg` 文件，等待磁盘映像窗口打开。
 3. 把窗口里的 `DeepSeek Harness.app` 拖到“应用程序”文件夹，不要直接长期放在下载目录或 DMG 窗口里运行。
 4. 打开“应用程序”，找到 **DeepSeek Harness**，双击启动。首次启动可能出现 macOS 的安全提示，这是因为当前包没有 Apple Developer 签名和公证。
 5. 如果 macOS 不允许打开：先点“完成”，然后打开“系统设置 → 隐私与安全性”，向下找到被阻止的应用，点击“仍要打开”，再回到“应用程序”重新启动。
 6. 应用成功复制到“应用程序”后，可以在 Finder 侧边栏对 DMG 点击推出；以后从“应用程序”或 Dock 启动即可。
 
-macOS DMG 的 SHA-256 校验值如下：
+Intel DMG 的 SHA-256 校验值如下：
 
 ```text
 74019C0811D42514CCCA44CAE8C73D3D1E9DFEE4CE03292FFC4E034DC93BD85E
@@ -88,6 +89,12 @@ macOS DMG 的 SHA-256 校验值如下：
 
 ```sh
 shasum -a 256 ~/Downloads/DeepSeek-Harness-0.1.0-rc.7-mac-x64.dmg
+```
+
+Apple Silicon DMG 的校验值保存在 macOS Release 中的同名 `.dmg.sha256` 文件；下载 DMG 和这个校验文件后，可以在终端执行：
+
+```sh
+shasum -a 256 -c ~/Downloads/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg.sha256
 ```
 
 ## 第一次打开后的配置
