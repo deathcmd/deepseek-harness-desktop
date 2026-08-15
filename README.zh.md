@@ -6,11 +6,11 @@
 
 ## 下载
 
-当前版本：[DeepSeek Harness Desktop 0.1.0-rc.6](https://github.com/deathcmd/deepseek-harness-desktop/releases/tag/desktop-v0.1.0-rc.6)
+当前版本：[DeepSeek Harness Desktop 0.1.0-rc.7](https://github.com/deathcmd/deepseek-harness-desktop/releases/tag/desktop-v0.1.0-rc.7)
 
 **Windows x64 安装程序：**
 
-[点击下载 DeepSeek-Harness-Setup-0.1.0-rc.6-win-x64.exe](https://github.com/deathcmd/deepseek-harness-desktop/releases/download/desktop-v0.1.0-rc.6/DeepSeek-Harness-Setup-0.1.0-rc.6-win-x64.exe)
+[点击下载 DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe](https://github.com/deathcmd/deepseek-harness-desktop/releases/download/desktop-v0.1.0-rc.7/DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe)
 
 安装程序已经包含运行所需的内容，不需要另外安装 Node.js、pnpm 或 `dsh` 命令行。
 
@@ -19,7 +19,7 @@
 ## Windows 安装和第一次使用
 
 1. 点击上面的下载链接，等待安装程序下载完成。
-2. 双击 `DeepSeek-Harness-Setup-0.1.0-rc.6-win-x64.exe`。
+2. 双击 `DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe`。
 3. 选择安装目录，例如 `D:\DeepSeek Harness Desktop`。
 4. 等安装器明确显示安装完成后，再打开桌面上的 **DeepSeek Harness** 图标。
 5. 应用打开后，在窗口内配置模型服务商和自己的凭据，然后开始对话。
@@ -33,13 +33,13 @@
 当前安装程序没有商业代码签名，Windows SmartScreen 可能显示“未知发布者”。点击“更多信息”或“仍要运行”前，请确认文件来自本仓库的 Release 页面，并核对 SHA-256：
 
 ```text
-E3970FD6C7B905D37EDDCF13DE5A02F56B67A3F59A8946CF3A941247DC1D4D7B  DeepSeek-Harness-Setup-0.1.0-rc.6-win-x64.exe
+F1858EBBA2A1C3340703D65B5BBD5704705488E1664B1612C6B21F087C77A36D  DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe
 ```
 
 PowerShell 校验命令：
 
 ```powershell
-Get-FileHash .\DeepSeek-Harness-Setup-0.1.0-rc.6-win-x64.exe -Algorithm SHA256
+Get-FileHash .\DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe -Algorithm SHA256
 ```
 
 ## 这个桌面版包含什么
