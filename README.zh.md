@@ -91,10 +91,17 @@ Intel DMG 的 SHA-256 校验值如下：
 shasum -a 256 ~/Downloads/DeepSeek-Harness-0.1.0-rc.7-mac-x64.dmg
 ```
 
-Apple Silicon DMG 的校验值保存在 macOS Release 中的同名 `.dmg.sha256` 文件；下载 DMG 和这个校验文件后，可以在终端执行：
+Apple Silicon DMG 的 SHA-256 校验值如下：
+
+```text
+3058C15E7A356F95D90B8E8147A23994C0FFD143BCB9E090BA6FF3DB2EAB7AAD
+```
+
+Release 中也提供同名 `.dmg.sha256` 校验文件。下载 DMG 和校验文件后，可以在终端执行：
 
 ```sh
-shasum -a 256 -c ~/Downloads/DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg.sha256
+cd ~/Downloads
+shasum -a 256 -c DeepSeek-Harness-0.1.0-rc.7-mac-arm64.dmg.sha256
 ```
 
 ## 第一次打开后的配置
