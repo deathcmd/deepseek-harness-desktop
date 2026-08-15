@@ -13,9 +13,10 @@ const runtimeRoot = isPackaged
 const dshEntry = isPackaged
   ? join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   : join(runtimeRoot, 'apps', 'cli', 'lib', 'bin.js')
+const applicationIconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
 const applicationIcon = isPackaged
-  ? join(process.resourcesPath, 'icon.png')
-  : join(__dirname, '..', 'resources', 'icon.png')
+  ? join(process.resourcesPath, applicationIconName)
+  : join(__dirname, '..', 'resources', applicationIconName)
 const defaultWorkspace = process.env.DSH_DESKTOP_WORKSPACE || app.getPath('home')
 
 let mainWindow

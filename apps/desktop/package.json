@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop",
   "description": "Cross-platform desktop shell for the official DeepSeek Harness Web application.",
-  "version": "0.1.0-rc.6",
+  "version": "0.1.0-rc.7",
   "publishConfig": {
     "access": "public"
   },
@@ -23,9 +23,9 @@
     "build": "pnpm --dir ../.. run build",
     "prepare-runtime": "node scripts/prepare-runtime.mjs",
     "package:dir": "pnpm run build && pnpm run prepare-runtime && electron-builder --dir",
-    "package:win": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis portable",
+    "package:win": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis",
     "package:mac": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg zip",
-    "package:all": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis portable --mac dmg zip"
+    "package:all": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis --mac dmg zip"
   },
   "devDependencies": {
     "electron": "^36.4.0",
@@ -36,6 +36,7 @@
     "productName": "DeepSeek Harness",
     "artifactName": "DeepSeek-Harness-${version}-${os}-${arch}.${ext}",
     "electronDist": "node_modules/electron/dist",
+    "compression": "normal",
     "directories": {
       "output": "../../release/desktop",
       "buildResources": "resources"
@@ -48,6 +49,10 @@
       {
         "from": "resources/icon.png",
         "to": "icon.png"
+      },
+      {
+        "from": "resources/icon.ico",
+        "to": "icon.ico"
       },
       {
         "from": "runtime",
@@ -66,10 +71,9 @@
       }
     ],
     "win": {
-      "icon": "resources/icon.png",
+      "icon": "resources/icon.ico",
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
@@ -80,9 +84,6 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "DeepSeek Harness"
-    },
-    "portable": {
-      "artifactName": "DeepSeek-Harness-Portable-${version}-${os}-${arch}.${ext}"
     },
     "mac": {
       "icon": "resources/icon.png",
