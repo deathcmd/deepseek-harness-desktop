@@ -11,11 +11,11 @@ name: E2E (real DeepSeek API)
 # keyless). The job-level `if:` below skips the whole job for those untrusted
 # PRs. The Dependabot test keys on the PR AUTHOR (pull_request.user.login), not
 # github.actor (the run trigger) — a maintainer reopening a Dependabot PR would
-# make github.actor human while the PR is still keyless. When the job runs, the
-# secret is expected, so the preflight hard-fails if it's missing (a missing
-# secret would otherwise make the self-skipping suite report a false green). A
-# job skipped by a job-level `if:` reports as a SUCCESSFUL check, so this
-# workflow is safe to use as a required status check if desired.
+# make github.actor human while the PR is still keyless. When a trusted run has
+# the optional secret, the preflight passes it only to the build/test steps.
+# Public mirrors and repositories without the secret receive an explicit
+# successful skip instead of an unexplained red check; adding
+# `DEEPSEEK_API_KEY_EXTERNAL` later automatically enables the real-API suite.
 #
 # SECURITY — NEVER change this trigger to `pull_request_target`. `pull_request`
 # checks out and runs the PR's HEAD code WITHOUT secrets for forks, which is what
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     name: e2e
     # Run on every trusted event. Skip untrusted PRs (forks + Dependabot) where
-    # the secret is withheld — they would otherwise hard-fail the preflight.
+    # the secret is withheld.
     if: >-
       github.event_name != 'pull_request'
       || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')
@@ -86,11 +86,10 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \
             || echo "apparmor userns knob absent — the functional probe decides"
 
-      # Guard against a false green: the e2e suites self-skip when the key is
-      # absent, so a missing/misconfigured secret would otherwise pass as
-      # "all skipped". This job only runs on trusted events (the `if:` above
-      # excludes keyless PRs), so the secret MUST be present — fail loudly if not.
-      - name: Preflight (require DEEPSEEK_API_KEY)
+      # The real-API suite is optional for public mirrors. Keep the decision in
+      # one explicit output so every later build/test step is skipped together.
+      - name: Preflight (optional DEEPSEEK_API_KEY)
+        id: credentials
         env:
           # Repo secret DEEPSEEK_API_KEY_EXTERNAL holds the external-API key;
           # the tests read process.env.DEEPSEEK_API_KEY, so map it across here.
@@ -98,16 +97,18 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
-            echo "::error::DEEPSEEK_API_KEY is empty. The e2e suite would self-skip and"
-            echo "::error::report a false green. Configure the repo secret DEEPSEEK_API_KEY_EXTERNAL."
-            exit 1
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::DEEPSEEK_API_KEY_EXTERNAL is not configured; skipping real-API E2E tests."
+            exit 0
           fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
           echo "DEEPSEEK_API_KEY present."
 
       # The e2e suites boot the example bins in `lib` mode (DSH_EXAMPLE_MODE=lib):
       # the built artifact under plain Node, resolving plugins through real package
       # exports — the shape a real consumer runs. That requires a prior build.
       - name: Build (lib for the e2e example bins)
+        if: steps.credentials.outputs.available == 'true'
         run: pnpm run build
 
       # Real-API end-to-end tests only. The keyless gates (lint/typecheck/
@@ -115,6 +116,7 @@ jobs:
       # DEEPSEEK_BASE_URL is pinned to the external API; the secret is scoped to
       # this step (and preflight) only — never exposed to checkout/setup/install.
       - name: E2E tests (real DeepSeek API)
+        if: steps.credentials.outputs.available == 'true'
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY_EXTERNAL }}
           DEEPSEEK_BASE_URL: https://api.deepseek.com
