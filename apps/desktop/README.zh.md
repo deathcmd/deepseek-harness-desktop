@@ -24,7 +24,7 @@ pnpm --dir apps/desktop exec electron .
 
 ## 打包
 
-Windows 命令会生成交互式 NSIS 安装器和便携式可执行文件。安装器允许用户选择安装目录，在所有打包文件写入完成前阻止应用启动，并创建带产品图标的桌面与开始菜单快捷方式。Windows NSIS 工具链受旧式路径长度限制，因此请从较短的检出路径构建，例如 `C:\src\deepseek-harness`。
+Windows 命令只生成交互式 NSIS 安装器。安装器使用更快的普通压缩配置，部署运行时会排除调试符号和源码地图，在所有打包文件写入完成前阻止应用启动，并创建带产品图标的桌面与开始菜单快捷方式。Windows NSIS 工具链受旧式路径长度限制，因此请从较短的检出路径构建，例如 `C:\src\deepseek-harness`。
 
 ```sh
 pnpm --dir apps/desktop run package:win

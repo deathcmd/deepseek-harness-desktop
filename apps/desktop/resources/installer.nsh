@@ -14,7 +14,10 @@ Var pid
 !macro customInstall
   Delete "$TEMP\ai.deepseek.harness.installing"
   IfFileExists "$SYSDIR\ie4uinit.exe" 0 icon_refresh_done
+  nsExec::Exec '"$SYSDIR\ie4uinit.exe" -ClearIconCache'
+  Pop $0
   nsExec::Exec '"$SYSDIR\ie4uinit.exe" -show'
   Pop $0
+  System::Call 'shell32::SHChangeNotify(i, i, i, i) (0x08000000, 0x0000, 0, 0)'
   icon_refresh_done:
 !macroend

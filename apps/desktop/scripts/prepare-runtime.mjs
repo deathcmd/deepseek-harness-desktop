@@ -1,11 +1,28 @@
 import { spawn } from 'node:child_process'
-import { readFile, rm, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repositoryRoot = resolve(desktopRoot, '../..')
 const runtimeRoot = join(desktopRoot, 'runtime')
+
+const disposableExtensions = new Set(['.cts', '.map', '.mts', '.pdb', '.ts'])
+
+/** Remove debug/source files that are never loaded by the built production runtime. */
+async function pruneRuntime(directory) {
+  const entries = await readdir(directory, { withFileTypes: true })
+  await Promise.all(entries.map(async (entry) => {
+    const entryPath = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      await pruneRuntime(entryPath)
+      return
+    }
+    if (disposableExtensions.has(extname(entry.name).toLowerCase())) {
+      await rm(entryPath, { force: true })
+    }
+  }))
+}
 
 function run(command, args) {
   return new Promise((resolvePromise, reject) => {
@@ -39,5 +56,6 @@ const runtimePackage = join(runtimeRoot, 'package.json')
 const packageData = JSON.parse(await readFile(runtimePackage, 'utf8'))
 packageData.private = true
 await writeFile(runtimePackage, `${JSON.stringify(packageData, null, 2)}\n`)
+await pruneRuntime(runtimeRoot)
 
 console.log(`Desktop runtime prepared at ${runtimeRoot}`)

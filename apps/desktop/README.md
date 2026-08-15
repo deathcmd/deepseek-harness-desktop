@@ -24,7 +24,7 @@ pnpm --dir apps/desktop exec electron .
 
 ## Packaging
 
-The Windows command produces an interactive NSIS installer and a portable executable. The installer lets the user select the destination, prevents the application from starting until all packaged files are present, and creates Desktop and Start menu shortcuts with the product icon. Build from a short checkout path, such as `C:\src\deepseek-harness`, because the Windows NSIS toolchain is subject to legacy path-length limits.
+The Windows command produces the interactive NSIS installer. The installer uses a faster normal compression profile, omits debug symbols and source maps from the deployed runtime, prevents the application from starting until all packaged files are present, and creates Desktop and Start menu shortcuts with the product icon. Build from a short checkout path, such as `C:\src\deepseek-harness`, because the Windows NSIS toolchain is subject to legacy path-length limits.
 
 ```sh
 pnpm --dir apps/desktop run package:win
