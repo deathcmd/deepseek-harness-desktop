@@ -32,7 +32,10 @@ python/**/__pycache__/
 python/**/.pytest_cache/
 apps/web/dist/
 apps/desktop/runtime/
+apps/desktop/runtime.asar
+apps/desktop/runtime.asar.unpacked/
 apps/desktop/runtime-*/
+apps/desktop/runtime-probe*/
 .desktop-runtime-*/
 release/desktop/
 .artifacts/

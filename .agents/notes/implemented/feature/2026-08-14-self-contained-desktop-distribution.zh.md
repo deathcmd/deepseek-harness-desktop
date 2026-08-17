@@ -14,16 +14,16 @@ monorepo 中的包依赖工作区关系、对等依赖（peer dependency）、�
 
 [`apps/desktop`](../../../../apps/desktop/README.md) 是 Electron 壳，它使用 Electron 内置的 Node.js 运行时启动已发布的 `@deepseek-ai/dsh` CLI（命令行界面）入口，将 `dsh web` 绑定至随机回环端口，等待成功的 HTTP 响应，然后在沙箱化 renderer 中加载未经修改的 Web 应用。该发行版有意复用 [GUI 分层决策](../architecture/2026-07-19-gui-layering-and-rpc-protocol.md)中描述的 Web 载体；桌面壳不添加 IPC 客户端，也不重新装配 Harness 插件。
 
-`apps/desktop-runtime` 声明官方 CLI 所需的生产依赖闭包。准备脚本使用 pnpm 的 hoisted 部署布局，并把生成的真实目录打包在 `app.asar` 之外；运行时链接不会指向源码检出目录。安装状态与 NPM 缓存位于 Electron 的单用户数据目录中，初始工作区则保持为用户主目录，除非 `DSH_DESKTOP_WORKSPACE` 覆盖该设置。
+`apps/desktop-runtime` 把官方 CLI 声明为唯一的生产依赖根，因此桌面运行时会自动跟随 CLI 当前的 bundle 与插件依赖图。准备脚本使用 pnpm 的 legacy hoisted 部署布局，移除非生产源码产物后把无链接依赖闭包写入独立的 `runtime.asar`。原生 addon 与子进程 helper 放在相邻的 `runtime.asar.unpacked`；一个很小的外置启动器使用 Electron 内置 Node.js 从归档导入 CLI。运行时链接不会指向源码检出目录。安装状态与 NPM 缓存位于 Electron 的单用户数据目录中，初始工作区则保持为用户主目录，除非 `DSH_DESKTOP_WORKSPACE` 覆盖该设置。
 
 应用关闭时会终止官方 CLI 的完整进程树，并等待其退出后再关闭 Electron。Windows 使用 `taskkill /T`；macOS 和 Linux 使用独立进程组，先进行有时限的优雅关闭，随后强制终止。
 
-Electron Builder 使用显式产品图标定义交互式 Windows NSIS 安装器、Windows 便携式可执行文件，以及 macOS DMG 和 ZIP 构建目标。Windows 安装器在替换应用文件前把自身进程记录到临时启动锁；只要该安装器仍在运行，已打包的桌面进程就拒绝启动，避免解压早期写入的可执行文件锁住其余文件。安装完成后会删除该锁并刷新 Windows 图标缓存。平台签名与公证仍由发行流水线负责。
+Electron Builder 使用显式产品图标定义交互式 Windows NSIS 安装器和 macOS DMG 安装器。Windows 安装器把完整应用载荷存为无压缩 ZIP 并直接写入所选安装目录，避免默认 7z 的临时解压再复制步骤。它在替换应用文件前把自身进程记录到临时启动锁；只要该安装器仍在运行，已打包的桌面进程就拒绝启动，避免解压早期写入的可执行文件锁住其余文件。安装完成后会删除该锁并广播轻量的 Shell 关联刷新。固定的 app ID 与 `deleteAppDataOnUninstall: false` 使正常升级只覆盖程序文件而不会删除 Electron 用户数据。平台签名与公证仍由发行流水线负责。
 
 ## Verification
 
-- 部署的运行时不含符号链接或 Windows junction，可直接启动官方 CLI，并通过回环 HTTP 提供 Web 根页面。
-- 取消临时构建盘符映射后，解包的 Windows 应用和便携式可执行文件仍能启动其打包 CLI；关闭窗口后不会留下 Harness 进程树。
+- 部署的运行时不含符号链接或 Windows junction；Electron 内置 Node.js 可从 `runtime.asar` 导入官方 CLI，并通过回环 HTTP 提供 Web 根页面。
+- 取消临时构建盘符映射后，解包的 Windows 应用仍能启动其打包 CLI；关闭窗口后不会留下 Harness 进程树。
 - 安装期间启动已打包应用时，它会在启动 CLI 前退出；安装后的可执行文件、应用窗口与快捷方式使用产品图标。
 - 签名公开发行前，macOS 打包与运行时验证在 macOS 上执行；Windows 主机无法验证原生 macOS 产物。
 

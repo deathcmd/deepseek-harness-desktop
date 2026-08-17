@@ -23,9 +23,6 @@ packages:
 # Vendored framework packages keep their upstream semver ranges, while local
 # builds must resolve those matching names to this workspace's pinned sources.
 linkWorkspacePackages: true
-# The desktop release deploys the official CLI as a standalone runtime.
-# Injecting workspace packages makes its dependency graph self-contained.
-injectWorkspacePackages: true
 
 overrides:
   '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
@@ -56,9 +53,10 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-subprocess-local@file:packages/subprocess/subprocess-local': true
-  '@deepseek-ai/dsh-subprocess-local': true
   electron: true
-  electron-winstaller: true
+  # Only electron-builder's Squirrel.Windows target uses this helper; desktop
+  # releases use NSIS, so its install script is intentionally not executed.
+  electron-winstaller: false
 
 minimumReleaseAgeExclude:
   # Fresh pi-ai releases carry the model catalog updates that are the whole

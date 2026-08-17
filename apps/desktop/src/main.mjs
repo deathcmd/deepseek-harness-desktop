@@ -8,8 +8,11 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isPackaged = app.isPackaged
 const runtimeRoot = isPackaged
-  ? join(process.resourcesPath, 'runtime')
+  ? join(process.resourcesPath, 'runtime.asar')
   : join(__dirname, '..', '..')
+const runtimeLauncher = isPackaged
+  ? join(process.resourcesPath, 'runtime-launcher.cjs')
+  : join(__dirname, '..', 'resources', 'runtime-launcher.cjs')
 const dshEntry = isPackaged
   ? join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   : join(runtimeRoot, 'apps', 'cli', 'lib', 'bin.js')
@@ -162,13 +165,14 @@ async function startHarness() {
     DSH_DESKTOP: '1',
     npm_config_cache: cacheRoot,
   }
-  const args = [dshEntry, 'web', '--host', '127.0.0.1', '--port', String(port)]
+  const args = [runtimeLauncher, 'web', '--host', '127.0.0.1', '--port', String(port)]
   dshProcess = spawn(process.execPath, args, {
     cwd: defaultWorkspace,
     detached: process.platform !== 'win32',
     env: {
       ...environment,
       ELECTRON_RUN_AS_NODE: '1',
+      DSH_DESKTOP_RUNTIME_ENTRY: dshEntry,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,

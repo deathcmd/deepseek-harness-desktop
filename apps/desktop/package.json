@@ -24,21 +24,23 @@
     "prepare-runtime": "node scripts/prepare-runtime.mjs",
     "package:dir": "pnpm run build && pnpm run prepare-runtime && electron-builder --dir",
     "package:win": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis",
-    "package:mac": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg zip",
+    "package:mac": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg",
     "package:mac-x64": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg --x64",
     "package:mac-arm64": "pnpm run build && pnpm run prepare-runtime && electron-builder --mac dmg --arm64",
-    "package:all": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis --mac dmg zip"
+    "package:all": "pnpm run build && pnpm run prepare-runtime && electron-builder --win nsis --mac dmg"
   },
   "devDependencies": {
-    "electron": "^36.4.0",
-    "electron-builder": "^26.0.12"
+    "@electron/asar": "^4.2.1",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "ai.deepseek.harness",
     "productName": "DeepSeek Harness",
     "artifactName": "DeepSeek-Harness-${version}-${os}-${arch}.${ext}",
     "electronDist": "node_modules/electron/dist",
-    "compression": "normal",
+    "compression": "store",
+    "asar": true,
     "directories": {
       "output": "../../release/desktop",
       "buildResources": "resources"
@@ -57,16 +59,16 @@
         "to": "icon.ico"
       },
       {
-        "from": "runtime",
-        "to": "runtime",
-        "filter": [
-          "package.json",
-          "pnpm-workspace.yaml"
-        ]
+        "from": "resources/runtime-launcher.cjs",
+        "to": "runtime-launcher.cjs"
       },
       {
-        "from": "runtime/node_modules",
-        "to": "runtime/node_modules",
+        "from": "runtime.asar",
+        "to": "runtime.asar"
+      },
+      {
+        "from": "runtime.asar.unpacked/node_modules",
+        "to": "runtime.asar.unpacked/node_modules",
         "filter": [
           "**/*"
         ]
@@ -83,6 +85,9 @@
       "include": "resources/installer.nsh",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
+      "useZip": true,
+      "differentialPackage": false,
+      "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "DeepSeek Harness"
@@ -90,8 +95,7 @@
     "mac": {
       "icon": "resources/icon.png",
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/simplification/2026-08-15-trim-desktop-installer-runtime.md
-2026-08-15-trim-desktop-installer-runtime.md: ff42228263785d30cff2b2aa8c625a5d647cd133
-2026-08-15-trim-desktop-installer-runtime.zh.md: e69605f96dbb17b678eddb327c00863377eb44c7
+2026-08-15-trim-desktop-installer-runtime.md: 694001d74fcf0cce47743ba2cce78e9b7fc3450e
+2026-08-15-trim-desktop-installer-runtime.zh.md: 8248a8db66b4aa2cc7c5c3220278b5333c53a1f7
