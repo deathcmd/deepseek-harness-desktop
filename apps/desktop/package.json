@@ -63,6 +63,10 @@
         "to": "runtime-launcher.cjs"
       },
       {
+        "from": "resources/runtime-resolver.mjs",
+        "to": "runtime-resolver.mjs"
+      },
+      {
         "from": "runtime.asar",
         "to": "runtime.asar"
       },

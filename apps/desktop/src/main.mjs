@@ -13,6 +13,9 @@ const runtimeRoot = isPackaged
 const runtimeLauncher = isPackaged
   ? join(process.resourcesPath, 'runtime-launcher.cjs')
   : join(__dirname, '..', 'resources', 'runtime-launcher.cjs')
+const runtimeResolver = isPackaged
+  ? join(process.resourcesPath, 'runtime-resolver.mjs')
+  : join(__dirname, '..', 'resources', 'runtime-resolver.mjs')
 const dshEntry = isPackaged
   ? join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   : join(runtimeRoot, 'apps', 'cli', 'lib', 'bin.js')
@@ -163,9 +166,13 @@ async function startHarness() {
     ...process.env,
     DSH_HOME: dataRoot,
     DSH_DESKTOP: '1',
+    DSH_DESKTOP_PROFILE: 'web',
     npm_config_cache: cacheRoot,
   }
-  const args = [runtimeLauncher, 'web', '--host', '127.0.0.1', '--port', String(port)]
+  const args = [
+    '--experimental-loader', pathToFileURL(runtimeResolver).href,
+    runtimeLauncher, 'web', '--host', '127.0.0.1', '--port', String(port),
+  ]
   dshProcess = spawn(process.execPath, args, {
     cwd: defaultWorkspace,
     detached: process.platform !== 'win32',

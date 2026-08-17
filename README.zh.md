@@ -55,7 +55,7 @@
 
 ### 覆盖升级且保留配置
 
-升级前先退出所有 **DeepSeek Harness** 窗口，然后下载同名的新安装程序并正常执行安装。安装器使用与旧版相同的应用标识，会覆盖原安装目录中的程序文件、快捷方式和内置运行时；它不会删除或重置你的 `DSH_HOME`、模型/API 设置、全局提示词、MCP、skill、工作区选择、会话、聊天记录或 NPM 缓存。
+升级前先退出所有 **DeepSeek Harness** 窗口，然后下载同名的新安装程序并正常执行安装。安装器使用与旧版相同的应用标识，会覆盖原安装目录中的程序文件、快捷方式和内置运行时；它不会删除或重置你的 `DSH_HOME`、已安装插件及插件配置、模型/API 设置、全局提示词、MCP、skill、工作区选择、会话、聊天记录或 NPM 缓存。新版桌面启动器还会从现有 profile 的 `node_modules` 解析第三方插件，并从内置运行时解析官方依赖，因此升级不需要重新安装插件。
 
 这些个人数据位于 Electron 的单用户数据目录，不在安装目录中。即使卸载程序，也不会自动清除它们；需要彻底清理时，请先自行备份后再按“忘记配置或想重新开始”操作。
 
@@ -70,7 +70,7 @@ Get-FileHash .\DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe -Algorithm SHA256
 正常结果应为：
 
 ```text
-CA5CA51C0D712B5F651396134B29A467567F357260D3EBD08F14E6BB2F304124
+55469DB5AA2BED95B92165B6D803BDBF4331C834438C12876D1618761610CA22
 ```
 
 如果计算出的值不一致，不要继续安装；重新从 Release 页面下载，并确认浏览器没有使用损坏的缓存文件。
@@ -178,8 +178,8 @@ skill 是一组可复用的任务说明，通常是一个目录中的 `SKILL.md`
 
 已安装桌面版的 Harness 数据目录通常是：
 
-- Windows：按 `Win + R`，输入 `%APPDATA%\DeepSeek Harness\dsh-home`，按回车。
-- macOS：在 Finder 中按 `Command + Shift + G`，输入 `~/Library/Application Support/DeepSeek Harness/dsh-home`，按回车。
+- Windows：按 `Win + R`，输入 `%APPDATA%\@deepseek-ai\dsh-desktop\dsh-home`，按回车。
+- macOS：在 Finder 中按 `Command + Shift + G`，输入 `~/Library/Application Support/@deepseek-ai/dsh-desktop/dsh-home`，按回车。
 
 如果目录尚未出现，先启动一次应用并关闭，再重新打开上述路径。项目内的 `AGENTS.md` 仍然只对对应项目或子目录生效；不要把 API Key 写入任何 `AGENTS.md`。
 
