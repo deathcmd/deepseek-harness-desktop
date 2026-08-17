@@ -803,10 +803,16 @@ export class SlotCore {
         break
       }
       case 'keyed': {
-        if (options.key === undefined) throw new Error(`keyed slot "${options.name}" requires options.key`)
-        const occupant = rec.entries.find(e => e.options.key === options.key && (e.options.priority ?? 0) === priority)
+        // `id` was the registration key in older client bundles, before the
+        // list-slot `id` and keyed-slot `key` fields were separated. Accept
+        // that legacy shape when loading an already-installed plugin, while
+        // keeping `key` as the canonical field for current callers.
+        const key = options.key ?? options.id
+        if (key === undefined) throw new Error(`keyed slot "${options.name}" requires options.key`)
+        if (options.key === undefined) options.key = key
+        const occupant = rec.entries.find(e => e.options.key === key && (e.options.priority ?? 0) === priority)
         if (occupant) {
-          throw new Error(`keyed slot "${options.name}" already has an entry for key "${options.key}" ${occupantHint(occupant)}`)
+          throw new Error(`keyed slot "${options.name}" already has an entry for key "${key}" ${occupantHint(occupant)}`)
         }
         break
       }

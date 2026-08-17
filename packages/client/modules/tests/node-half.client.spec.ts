@@ -11,19 +11,29 @@ import type { WebServer, WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import { ClientModuleRegistry } from '../src/index.ts'
 
 let root: string | undefined
+let runtimeRoot: string | undefined
+const initialRuntimeEntry = process.env.DSH_DESKTOP_RUNTIME_ENTRY
 
 afterEach(() => {
   if (root !== undefined) rmSync(root, { recursive: true, force: true })
+  if (runtimeRoot !== undefined) rmSync(runtimeRoot, { recursive: true, force: true })
+  if (initialRuntimeEntry === undefined) {
+    delete process.env.DSH_DESKTOP_RUNTIME_ENTRY
+  } else {
+    process.env.DSH_DESKTOP_RUNTIME_ENTRY = initialRuntimeEntry
+  }
   root = undefined
+  runtimeRoot = undefined
 })
 
 /** Create a resolvable package whose client export points at the returned path. */
 function writePackage(
   packageName: string,
   metadata: Record<string, unknown> = { dsh: { client: { platform: 'web' } } },
+  packageRoot = root,
 ): string {
-  root ??= realpathSync(mkdtempSync(join(tmpdir(), 'dsh-client-modules-')))
-  const pkgRoot = join(root, 'node_modules', ...packageName.split('/'))
+  packageRoot ??= root = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-client-modules-')))
+  const pkgRoot = join(packageRoot, 'node_modules', ...packageName.split('/'))
   const clientPath = join(pkgRoot, 'lib', 'client.js')
   mkdirSync(pkgRoot, { recursive: true })
   writeFileSync(join(pkgRoot, 'package.json'), JSON.stringify({
@@ -69,6 +79,36 @@ function construct(packageNames: string[]): ClientModuleRegistry {
 }
 
 describe('client bundle activation', () => {
+  it('prefers a user profile package over the packaged runtime fallback', () => {
+    const packageName = '@fixture/profile-wins'
+    const profileClientPath = writePackage(packageName)
+    runtimeRoot = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-client-runtime-')))
+    writePackage(packageName, undefined, runtimeRoot)
+    const runtimeEntry = join(runtimeRoot, 'runtime-entry.mjs')
+    writeFileSync(runtimeEntry, 'export {}\n')
+    process.env.DSH_DESKTOP_RUNTIME_ENTRY = runtimeEntry
+    mkdirSync(dirname(profileClientPath), { recursive: true })
+    writeFileSync(profileClientPath, 'module.exports = { source: "profile" }\n')
+
+    const service = construct([packageName])
+    expect(service.clientPath(packageName)).toBe(profileClientPath)
+  })
+
+  it('resolves an official package from the desktop runtime when the profile misses it', () => {
+    const packageName = '@fixture/runtime-only'
+    root = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-client-profile-')))
+    runtimeRoot = realpathSync(mkdtempSync(join(tmpdir(), 'dsh-client-runtime-')))
+    const runtimeClientPath = writePackage(packageName, undefined, runtimeRoot)
+    const runtimeEntry = join(runtimeRoot, 'runtime-entry.mjs')
+    writeFileSync(runtimeEntry, 'export {}\n')
+    process.env.DSH_DESKTOP_RUNTIME_ENTRY = runtimeEntry
+    mkdirSync(dirname(runtimeClientPath), { recursive: true })
+    writeFileSync(runtimeClientPath, 'module.exports = { source: "runtime" }\n')
+
+    const service = construct([packageName])
+    expect(service.clientPath(packageName)).toBe(runtimeClientPath)
+  })
+
   it('allows sibling dsh roles', () => {
     const currentName = '@fixture/current-client-field'
     const clientPath = writePackage(currentName, {

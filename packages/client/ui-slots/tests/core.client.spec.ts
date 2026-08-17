@@ -135,6 +135,10 @@ describe('kind semantics', () => {
     // Statically rejected (KindOptions); runtime guard stays for dynamic callers.
     // @ts-expect-error keyed registration requires options.key
     expect(() => core.register({ name: 'test.keyed' }, Comp)).toThrow('requires options.key')
+    // Bundles built before keyed/list options were split used `id` for the
+    // keyed registration field; keep those installed plugins loadable.
+    expect(() => core.register({ name: 'test.keyed', id: 'legacy' } as never, Comp)).not.toThrow()
+    expect(core.entries('test.keyed').some(entry => entry.options.key === 'legacy')).toBe(true)
     expect(() => core.register({ name: 'test.keyed', key: 'b' }, Comp)).not.toThrow()
   })
 

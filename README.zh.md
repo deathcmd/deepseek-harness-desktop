@@ -70,7 +70,7 @@ Get-FileHash .\DeepSeek-Harness-Setup-0.1.0-rc.7-win-x64.exe -Algorithm SHA256
 正常结果应为：
 
 ```text
-F5872121BAAC8690C871EA50DC5F73C5D9F17C39530BF69264566373C615983B
+BA499A6C1D96BB7F2AEADF0782CAD2907DE42C64F64563A1A69354B289E971BA
 ```
 
 如果计算出的值不一致，不要继续安装；重新从 Release 页面下载，并确认浏览器没有使用损坏的缓存文件。

@@ -170,6 +170,9 @@ async function startHarness() {
     npm_config_cache: cacheRoot,
   }
   const args = [
+    // The official profile includes the HMR host plugin. Electron's embedded
+    // Node must expose its loader internals for that service to initialize.
+    '--expose-internals',
     '--experimental-loader', pathToFileURL(runtimeResolver).href,
     runtimeLauncher, 'web', '--host', '127.0.0.1', '--port', String(port),
   ]

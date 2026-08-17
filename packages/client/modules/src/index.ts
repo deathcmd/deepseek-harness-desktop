@@ -210,7 +210,27 @@ export class ClientModuleRegistry extends Service {
       throw new Error('client-modules: ctx.baseUrl is unset — the node half needs the config-tree anchor to resolve plugin packages')
     }
     const require = createRequire(ctx.baseUrl)
-    this.resolvePkgJson = spec => require.resolve(`${spec}/package.json`)
+    // Packaged Desktop runs the official dependency tree inside runtime.asar.
+    // A profile-local `require.resolve()` cannot walk through the junction that
+    // points into that archive on Windows, even though Electron can load the
+    // package when anchored from a file inside the archive. Keep the profile
+    // resolver first so user-installed packages win, then retry from the
+    // runtime entry supplied by the desktop shell.
+    const runtimeRequire = process.env.DSH_DESKTOP_RUNTIME_ENTRY === undefined
+      ? undefined
+      : createRequire(process.env.DSH_DESKTOP_RUNTIME_ENTRY)
+    this.resolvePkgJson = (spec) => {
+      try {
+        return require.resolve(`${spec}/package.json`)
+      } catch (profileError) {
+        if (runtimeRequire === undefined) throw profileError
+        try {
+          return runtimeRequire.resolve(`${spec}/package.json`)
+        } catch {
+          throw profileError
+        }
+      }
+    }
 
     // Subscribe before seeding so a fiber arriving mid-activation lands in the
     // same dirty set (Set idempotence makes the overlap harmless). An entry-less
