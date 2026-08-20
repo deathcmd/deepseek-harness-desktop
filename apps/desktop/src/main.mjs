@@ -174,7 +174,7 @@ async function startHarness() {
     // Node must expose its loader internals for that service to initialize.
     '--expose-internals',
     '--experimental-loader', pathToFileURL(runtimeResolver).href,
-    runtimeLauncher, 'web', '--host', '127.0.0.1', '--port', String(port),
+    runtimeLauncher, 'web', '--host', '127.0.0.1', '--port', String(port), '--no-open',
   ]
   dshProcess = spawn(process.execPath, args, {
     cwd: defaultWorkspace,

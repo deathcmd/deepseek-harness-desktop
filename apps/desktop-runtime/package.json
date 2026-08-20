@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop-runtime",
   "description": "Production dependency closure used by the DeepSeek Harness desktop installers.",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0-rc.8",
   "publishConfig": {
     "access": "public"
   },
