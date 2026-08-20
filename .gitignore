@@ -39,6 +39,7 @@ apps/desktop/runtime-probe*/
 .desktop-runtime-*/
 release/desktop/
 .artifacts/
+.dsh-build/
 .playwright-mcp/
 .orig
 .worktrees/
