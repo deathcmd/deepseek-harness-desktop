@@ -108,38 +108,9 @@ async function startupSession(
   dialect: ShellDialect,
   signal?: AbortSignal,
 ): Promise<void> {
-  const start = async (): Promise<void> => {
-    if (dialect === 'bash') {
-      await session.initialize(signal)
-      return
-    }
-    // pwsh cannot install its prompt from the environment: write the prompt
-    // function through the session and wait for the first marker prompt,
-    // which is also the readiness contract of the bash initialize path. The
-    // first send also pins UTF-8 output (the shared pwsh-local preamble)
-    // before anything runs: the session decode path treats PTY bytes as
-    // UTF-8, and an un-pinned console writes its host code page for
-    // non-ASCII output. The banner-to-prompt gap can outlast the silence
-    // bound, so the wait loops over follow-up sends until the controlled
-    // prompt is actually visible (in the viewport or the retained scrollback
-    // when it landed between sends), bounded by the send deadline.
-    let viewport = ''
-    for (;;) {
-      const first = viewport.length === 0
-      const operation = session.startSend({
-        text: first ? ENCODING_PREAMBLE + PWSH_PROMPT_SETUP : '',
-        submit: first,
-        ...signal !== undefined ? { signal } : {},
-      })
-      const result = await operation.done
-      if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
-      if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
-      viewport = result.viewport
-      const scrollback = session.read({ offset: 0, count: 20 }).text
-      if (viewport.includes(CONTROLLED_PROMPT) || scrollback.includes(CONTROLLED_PROMPT)) break
-    }
-    session.motd = viewport
-  }
+  const start = (): Promise<void> => dialect === 'pwsh'
+    ? session.initialize(signal, ENCODING_PREAMBLE + PWSH_PROMPT_SETUP)
+    : session.initialize(signal)
   if (signal === undefined) {
     await start()
     return

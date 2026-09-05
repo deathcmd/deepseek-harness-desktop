@@ -795,6 +795,45 @@ describe('LocalPtySession readiness and output', () => {
     await rejected
   })
 
+  it('keeps one pwsh startup deadline when only the bootstrap echo arrives', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const bootstrap = "function prompt { 'dsh> ' }"
+    const timedOut = expect(session.initialize(undefined, bootstrap)).rejects.toThrow('startup timeout')
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitData(bootstrap + '\r\n')
+    terminal.inspector.waiting = true
+    await vi.advanceTimersByTimeAsync(100)
+    await timedOut
+    expect(terminal.writes).toEqual([bootstrap + '\r'])
+    await session.close('test complete')
+  })
+
+  it.each(['dsh> ', 'Console access denied\r\ndsh> '])('accepts a standalone pwsh prompt without a Console marker (%s)', async (output) => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const initialized = session.initialize(undefined, "function prompt { 'dsh> ' }")
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitData(output)
+    await vi.advanceTimersByTimeAsync(60)
+    await initialized
+    expect(session.motd).toContain('dsh> ')
+    await session.close('test complete')
+  })
+
+  it('rejects a pwsh bootstrap whose shell exits before its first prompt', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const exited = expect(session.initialize(undefined, "function prompt { 'dsh> ' }")).rejects.toThrow('exited during startup')
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitExit(1)
+    await exited
+    await session.close('test complete')
+  })
+
   it('waits for printable prompt text when the startup marker is split from PS1', async () => {
     vi.useFakeTimers()
     const terminal = new FakeTerminal()

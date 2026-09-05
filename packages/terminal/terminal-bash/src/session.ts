@@ -204,12 +204,17 @@ export class LocalPtySession implements TerminalBackendSession {
   /**
    * Capture startup output through the same readiness contract as later sends.
    * @param signal - optional cancellation while the shell reaches its first prompt.
+   * @param bootstrap - optional command submitted once before waiting for startup readiness.
    * @returns Resolves after startup readiness; rejects on exit or readiness timeout.
    */
-  async initialize(signal?: AbortSignal): Promise<void> {
+  async initialize(signal?: AbortSignal, bootstrap?: string): Promise<void> {
     this.initializing = true
     try {
-      const operation = this.startSend({ text: '', submit: false, ...signal !== undefined ? { signal } : {} })
+      const operation = this.startSend({
+        text: bootstrap ?? '',
+        submit: bootstrap !== undefined,
+        ...signal !== undefined ? { signal } : {},
+      })
       const result = await operation.done
       if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
@@ -449,7 +454,13 @@ export class LocalPtySession implements TerminalBackendSession {
         return
       }
       const elapsed = Date.now() - operation.startedAt
-      const startupHasOutput = !this.initializing || this.scrollback.snapshot().text.length > 0
+      const startupText = this.scrollback.snapshot().text
+      // The bootstrap echo contains the prompt's source literal, not evidence
+      // that pwsh has executed it. A standalone final prompt also supports a
+      // constrained shell that cannot emit the Console-based OSC marker.
+      const startupHasOutput = !this.initializing || (this.config.shellDialect === 'pwsh'
+        ? startupText === CONTROLLED_PROMPT || startupText.endsWith(`\n${CONTROLLED_PROMPT}`)
+        : startupText.length > 0)
       const acceptsStdinWait = startupHasOutput && foreground !== undefined
         && operation.acceptsStdinWait(foreground.processGroupId, foreground.inputWaiting)
       if (elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {

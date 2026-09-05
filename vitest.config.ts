@@ -30,7 +30,6 @@ const windowsUnsupportedPackages = process.platform === 'win32'
       'packages/shell/bash-sandbox',
       'packages/shell/tool-bash',
       'packages/hooks/*',
-      'packages/terminal/terminal-bash',
       'packages/sandbox/sandbox-local',
     ]
   : []

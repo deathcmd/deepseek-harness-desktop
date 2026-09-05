@@ -24,7 +24,7 @@ harness 在 Windows 上没有持久 shell。持久 `bash` 栈按构造就是 POS
 
 ### `@deepseek-ai/dsh-terminal-bash` 的 shell 方言
 
-一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`，存量部署逐字节不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 无法从环境安装提示符，因此 backend 在启动时通过会话写入 prompt 函数，并等待受控提示符真正可见——因为 pwsh 从横幅到提示符的间隙可能超过静默上限，所以会在后续 send 上循环等待；`session_exit` 或 `timeout` 结算拒绝 spawn。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 sanitizer、`PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑原样复用——标记仍只是就绪信号、载荷不被消费，与 bash 路径完全一致，且没有新增模型通知通道（与当前实现对齐；延后的 BEL 事件通道保持延后）。
+一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`，存量部署逐字节不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 无法从环境安装提示符，因此一次会话初始化会提交 prompt 函数与编码前缀，并使用同一个绝对期限。引导命令的回显含有提示符字面量，但不能证明就绪；会话会等待 OSC 标记与精确的可打印尾部，或者先确认独占末行的提示符再接受无标记就绪。`session_exit` 或 `timeout` 结算会拒绝 spawn，不会续期或重新提交引导命令。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 sanitizer、`PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑原样复用——标记仍只是就绪信号、载荷不被消费，与 bash 路径完全一致，且没有新增模型通知通道（与当前实现对齐；延后的 BEL 事件通道保持延后）。
 
 ### `@deepseek-ai/dsh-tool-pwsh-persistent`
 
@@ -38,7 +38,7 @@ minimal 预设用 #2234 的 `disabled: !!js` 插值按平台门控持久 shell �
 
 ### 测试
 
-Windows 测试面沿用 master 的豁免结构：terminal-bash 与 subprocess-local 的测试在 win32 上继续排除（`windowsUnsupportedTests`），其源码在 win32 上继续覆盖豁免（`windowsUnsupportedCoveragePackages`），平台门控 fixture 与 node 翻译命令因此仍是 win32 开发车道的证据；koffi-backed inspector 在 Linux 侧加入 windows-only 覆盖豁免。`tool-pwsh-persistent` 不在豁免之列：其套件在 windows-native 车道上运行、源码受覆盖约束，镜像 `tool-bash-persistent` 的 stub 模式矩阵并加回显剥离模式；真实 pwsh 套件在真实 ConPTY 会话上证明持久 cwd/env、密钥清洗、多行与 here-string 命令、大输出裁剪与退出/重置。ACP keyless snapshot 通过真实 Loader 组合启动持久工具，并固定模型可见的 schema 与结果。
+terminal-bash 的配置、生命周期与 sanitizer 套件会在 Windows 上运行，包括真实 pwsh 会话；只有真实 POSIX bash 场景在 Windows 上跳过。其运行时源码仍受覆盖率约束。既有 subprocess-local 豁免独立保留，基于 koffi 的检查器仍不计入 Linux 覆盖率。`tool-pwsh-persistent` 不在豁免之列：其套件在 windows-native 车道上运行、源码受覆盖约束，镜像 `tool-bash-persistent` 的 stub 模式矩阵并加回显剥离模式；真实 pwsh 套件在真实 ConPTY 会话上证明持久 cwd/env、密钥清洗、多行与 here-string 命令、大输出裁剪与退出/重置。ACP keyless snapshot 通过真实 Loader 组合启动持久工具，并固定模型可见的 schema 与结果。
 
 ## 备选方案
 
@@ -54,7 +54,7 @@ Windows 测试面沿用 master 的豁免结构：terminal-bash 与 subprocess-lo
 
 **Windows 成为一等公民的持久 shell 宿主。** 持久 pwsh 栈在 windows-native 车道上运行并受覆盖门禁约束；一次性/持久 shell 的划分与 POSIX 镜像，预设 spec 在两种平台上都钉死每宿主恰好一个 shell 栈。
 
-**Windows 覆盖沿用 master 的豁免结构。** subprocess-local 与 terminal-bash 源码在 win32 上保持覆盖豁免、其套件保持测试排除，与 master 完全一致；Windows 代码路径经 win32 开发车道与真实 pwsh 工具套件验证，新表面的覆盖义务在 windows-native 车道上落在 `tool-pwsh-persistent`。
+**Windows 覆盖包含共享终端后端。** `terminal-bash` 与 `tool-pwsh-persistent` 会在 Windows 上运行平台无关套件与真实 pwsh 场景。引导回显回归与无提示符期限用例覆盖可用 shell 出现之前的启动过程；完整 Loader 与 ACP 场景保留模型可见输出检查。
 
 **Windows 就绪弱于 Linux。** 伪 pgid marker 快路径覆盖 shell 提示符，但没有提示符的子进程按静默档结算（约 3s），与 macOS 完全一致；没有精确的 stdin-wait 档。
 
