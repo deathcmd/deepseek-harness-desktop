@@ -67,6 +67,7 @@ Safari 的原生文本控件存在一个引擎例外：跨过软换行阈值的�
 - chip、claim token 高亮与文本引用标记在滚动时仍与其字形对齐，因为它们定位在 backdrop 内部、随之移动。除去掉哨兵之外，装饰扫描没有变化。
 - 在 Firefox 与 WebKit 上，点进一个草稿超过上限的 composer 现在还会把会话 transcript（文本记录）滚动到底部：光标的 scroll-into-view 会越过 composer 的滚动容器一路走到 transcript 的滚动容器，而一个比自身盒子矮的 textarea 从不会引发这一步。chromium 不会。已实测，并试过 `overscroll-behavior: contain` 与 `contain: paint`，两者都拦不住这次上行——没有任何 CSS 能终止 scroll-into-view 的接力。接受：它滚向底部，而 composer 本来就在底部，而其替代方案是在每个引擎上都出现光标与文字明显分离。
 - 翻页与拖拽选区的行为未变，二者均做了新旧对照实测。`PageDown`/`PageUp` 本来就不会移动 textarea 的插入点——chromium 是滚动一页并保持 `selectionStart` 不变，新旧几何皆然，区别只在于滚的是哪个盒子。拖拽选区越过下边缘仍会自动滚动，且落点一致（chromium 628/628、firefox 625/620、WebKit 170/170——WebKit 自动滚动较慢，但改动前后一样慢）。
+- 已打开且标记为 `aria-modal="true"` 的弹窗在 composer 挂载、解锁和切换会话期间保留焦点。自动聚焦等待没有模态弹窗的后续生命周期转换，而不是打断失焦即取消的路径编辑器。让工作区创建串行等待每个 Session 就绪只会通过阻止无关用户输入来掩盖焦点竞态。
 - composer 自己发起的 `focus()` 全部加了 `preventScroll`——解锁/切会话的 effect，以及工具栏按钮上那个保持焦点的 mousedown——因此一次没有任何手势要求的聚焦，不会再通过更高的 textarea 的回视链把 transcript 挪走。抑制这条链之后，光标就回到了我们手上，而这在一条路径上确实要紧：composer 的 DOM 跨会话复用，因此切到更长的草稿时旧偏移会留着，而换值会把光标放到新草稿的末尾。三引擎实测，这会让光标落在停在 0 的盒子下方 940px 处；于是该 effect 会在自己的滚动容器里把它带回来，落点 625/628——正是旧几何靠浏览器达到的 628。mousedown 那条不需要回视：光标没动过，而下一次敲键会拿到浏览器原生的回视。另一个只负责回视的 effect 会处理渲染后才到达的非空草稿：`ConversationSession` 在自己的 mount effect 中注入持久化草稿，而该 effect 在本组件的 effect 之后运行，因此如果没有这个独立 effect，第一次回视会量到空镜像，且不会再为随后出现的草稿重跑。第二个 effect 从不聚焦，因此发送后清空或发送失败后恢复这类普通的空/非空转换不会从其他控件夺走焦点。
 - 撤销/重做可以在不恢复光标、也不回视的情况下改动草稿：状态机重放上一版草稿，DOM 选区停在浏览器钳位后的位置。这早于本次改动且未被改动——在此点名，是因为另外两处恢复都会回视，会让这处遗漏看起来像有意为之；真被报告时 helper 就在旁边。
 - 任何新增在 backdrop 旁边的层都属于滚动容器**内部**，并且必须与草稿等高，否则就会重新引入这一缺陷。这是 composer 长期存在的风险点：两层拆分对 chip 与高亮是承重的，因此耦合必须来自结构，而不是靠维护。
@@ -74,6 +75,8 @@ Safari 的原生文本控件存在一个引擎例外：跨过软换行阈值的�
 ## 测试
 
 [input-bar.spec.tsx](../../../../packages/client/ui-conversation/tests/input-bar.client.spec.tsx) 中的单元用例断言 jsdom 能看见的部分：同一个滚动盒同时包含 textarea 与 backdrop，backdrop 的文本现在就是草稿本身、不多不少，且渲染后才到达的持久化草稿会回视其光标，同时不从其他控件夺走焦点。jsdom 对任何元素都报告 `scrollHeight === clientHeight` 且从不滚动，因此几何属于浏览器场景；滚轮接力用例改为桩接滚动容器的度量，而非 textarea 的。
+
+[workspace-management.e2e.ts](../../../../apps/web/tests/workspace-management.e2e.ts) 把一个真实 Session 创建请求延迟到下一个目录弹窗持有路径草稿时才放行。组装后的浏览器快照保留该草稿及其焦点，随后验证新目录和注册条目使用指定的父目录。单元用例在挂载、解锁和切换会话时保留模态弹窗焦点，再验证后续没有模态弹窗的会话切换恢复自动聚焦。
 
 [composer-draft-scroll.e2e.ts](../../../../apps/web/tests/composer-draft-scroll.e2e.ts) 在 chromium 中针对构建产物度量其余部分：全新工作区的空白 composer 中一份 40 行草稿，零模型调用。每个度量都在光标自己的坐标系里读取——即 textarea 把第 n 行放在哪，含其自身偏移——再与 backdrop 同一行文本上的 DOM Range 相比，因为这个差值正是用户看到的东西。决定性的用例改变偏移，并**在本任务结束之前**重新读取该差值，也就是在任何 `scroll` 监听可能运行之前：单一滚动容器下为 0，镜像方案下则是整个增量。空洞性保护先断言草稿确实超过了带上限的盒子；其余用例分别覆盖高度上限、三层同一折行宽度、滚轮手势、以换行结尾的草稿，以及过去由 textarea 自身滚动承担的光标回视路径——滚离光标后输入，必须把滚动容器带回光标处。
 

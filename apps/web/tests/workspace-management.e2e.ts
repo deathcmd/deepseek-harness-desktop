@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { join, sep } from 'node:path'
 import type { Browser, Locator, Page } from 'playwright'
 import { chromium } from 'playwright'
-import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
@@ -30,6 +30,7 @@ const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/workspace-management', i
 const SEED = fileURLToPath(new URL('./snapshots/seeded-history/seed.jsonl', import.meta.url))
 const MODE = webSnapshotMode()
 const BROWSER_EXPECTED = join(SNAPSHOT_DIR, 'directory-browser.expected.md')
+const PATH_EDIT_EXPECTED = join(SNAPSHOT_DIR, 'workspace-path-edit.expected.md')
 const SEED_ID = 'workspace-management-web-e2e'
 // Both waits exceed ui-primitives' 200ms POINTER_GRACE_MS. Keep them above
 // that value if the shared setting changes.
@@ -47,13 +48,14 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
    * the path-edit affordance. Adding is the header button's only action, so
    * the click lands in the dialog with no menu in between.
    */
-  async function browseTo(path: string): Promise<Locator> {
+  async function browseTo(path: string, beforeCommit?: (input: Locator) => Promise<void>): Promise<Locator> {
     await page.getByRole('button', { name: 'Add workspace' }).click()
     const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
     await dialog.waitFor({ timeout: 10_000 })
     await dialog.getByRole('button', { name: 'Edit path' }).click()
     const pathInput = dialog.locator('input[aria-label="Edit path"]')
     await pathInput.fill(path)
+    await beforeCommit?.(pathInput)
     await pathInput.press('Enter')
     return dialog
   }
@@ -62,8 +64,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
    * Create a folder inside `parent` through the dialog and adopt it — the
    * product's only route to a brand-new workspace directory.
    */
-  async function addNewFolderWorkspace(parent: string, name: string): Promise<void> {
-    const dialog = await browseTo(parent)
+  async function addNewFolderWorkspace(parent: string, name: string, beforeCommit?: (input: Locator) => Promise<void>): Promise<void> {
+    const dialog = await browseTo(parent, beforeCommit)
     await dialog.getByRole('button', { name: 'New folder' }).click()
     await page.getByLabel('Folder name').fill(name)
     await page.getByRole('button', { name: 'Create', exact: true }).click()
@@ -134,13 +136,39 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   it('adds two workspaces through the dialog, each on a folder it created', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-ws-create'))
-    const add = async (name: string): Promise<void> => {
-      await addNewFolderWorkspace(scaffold.workspaceCwd, name)
+    const add = async (name: string, beforeCommit?: (input: Locator) => Promise<void>): Promise<void> => {
+      await addNewFolderWorkspace(scaffold.workspaceCwd, name, beforeCommit)
       // The real workspace materializes in the tree as a group row.
       await expect.poll(() => page.getByText(name, { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     }
-    await add('alpha-ws')
-    await add('beta-ws')
+    // Settle the first workspace's real Session creation while the next
+    // directory's path draft owns focus, rather than relying on RPC timing.
+    const creating = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const createSession = scaffold.ctx.apiProxy.sessions.create.bind(scaffold.ctx.apiProxy.sessions)
+    const create = vi.spyOn(scaffold.ctx.apiProxy.sessions, 'create')
+      .mockImplementationOnce(async (request) => {
+        creating.resolve(undefined)
+        await release.promise
+        return await createSession(request)
+      })
+    try {
+      await add('alpha-ws')
+      await creating.promise
+      await add('beta-ws', async (pathInput) => {
+        release.resolve(undefined)
+        await page.locator('textarea:enabled[placeholder="Describe what you want to build"]')
+          .waitFor({ timeout: 15_000 })
+        expect(await pathInput.count()).toBe(1)
+        expect(await pathInput.inputValue()).toBe(scaffold.workspaceCwd)
+        expect(await pathInput.evaluate(input => document.activeElement === input)).toBe(true)
+        const snapshot = await captureStableAria(page, '[role="dialog"] input[aria-label="Edit path"]', scaffold.workspaceCwd)
+        await compareOrRefreshGolden(PATH_EDIT_EXPECTED, snapshot, MODE)
+      })
+    } finally {
+      release.resolve(undefined)
+      create.mockRestore()
+    }
     // Durable on the host: both registered, newest first (create prepends),
     // each titled after the folder the dialog made.
     const titles = scaffold.ctx.workspaceRegistry.list().map(workspace => workspace.title)
@@ -619,8 +647,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   it.skipIf(MODE === 'record')('issued zero model calls and stayed clean', async () => {
     expect(tripwire.warnings).toEqual([])
-    // The directory-browser aria golden is this spec's one owned artifact;
+    // Directory-browser and path-edit aria goldens belong to this spec;
     // the seed it reuses is owned (and inventory-guarded) by seeded-history.
-    await assertFixtureInventory(SNAPSHOT_DIR, ['.gitkeep', 'directory-browser.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['.gitkeep', 'directory-browser.expected.md', 'workspace-path-edit.expected.md'])
   })
 })
