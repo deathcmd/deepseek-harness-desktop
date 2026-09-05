@@ -18,7 +18,7 @@ The monorepo packages rely on workspace relationships, peer dependencies, native
 
 The desktop [runtime helpers](../../../../apps/desktop/src/runtime.mjs) distinguish the checkout root from the installed archive and bound each HTTP readiness probe within the startup deadline. A stalled HTTP connection cannot keep startup waiting indefinitely. Both numeric exit codes and terminating signals identify a finished child process.
 
-The publication policy includes both desktop source modules explicitly. Knip treats the external launcher and resolver as process entry points and excludes the manifest-only deployment workspace from import-usage analysis, matching the Python deployment workspace; packaging and runtime checks still validate its dependencies.
+The [publication policy](../../../../scripts/publication-payload.ts) includes both desktop source modules explicitly and applies the same package-scoped exceptions to manifests and packed tarballs. Other source entries and all source maps remain forbidden. Knip treats the external launcher and resolver as process entry points and excludes the manifest-only deployment workspace from import-usage analysis, matching the Python deployment workspace; packaging and runtime checks still validate its dependencies.
 
 Application shutdown terminates the complete official CLI process tree and waits for exit before Electron closes. Windows uses `taskkill /T`; macOS and Linux use a dedicated process group with a bounded graceful shutdown followed by forced termination.
 

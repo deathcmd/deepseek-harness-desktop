@@ -3,9 +3,9 @@
  * `pnpm`, `npm`, and `tar`, and each needs one of three failure behaviours.
  */
 
-import { spawnSync } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { execaSync } from 'execa'
 
 /** Where and with what environment a release step runs a command. */
 export interface RunOptions {
@@ -33,9 +33,11 @@ export interface CommandResult {
  * @returns The exit status and captured streams.
  */
 export function attempt(command: string, args: readonly string[], options: RunOptions = {}): CommandResult {
-  const result = spawnSync(command, [...args], { cwd: options.cwd, env: options.env, encoding: 'utf8' })
-  if (result.error !== undefined) throw result.error
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+  const result = execaSync(command, args, {
+    ...options, extendEnv: false, reject: false, stripFinalNewline: false,
+  })
+  if (result instanceof Error && (result.code !== undefined || result.isMaxBuffer)) throw result
+  return { status: result.exitCode ?? null, stdout: result.stdout, stderr: result.stderr }
 }
 
 /**
@@ -45,7 +47,7 @@ export function attempt(command: string, args: readonly string[], options: RunOp
  * needs both halves: the output has to reach the workflow log, and the caller has
  * to read it to decide whether a failure is worth retrying.
  *
- * This is not live progress. `spawnSync` returns only after the child exits, so
+ * This is not live progress. `execaSync` returns only after the child exits, so
  * nothing appears while the command runs, and the two streams are echoed one
  * after the other — all of stdout, then all of stderr — which loses their
  * interleaving. For an npm publish that matters in one visible way: `npm notice`
@@ -58,18 +60,19 @@ export function attempt(command: string, args: readonly string[], options: RunOp
  * @returns The exit status and captured streams.
  */
 export function attemptEchoed(command: string, args: readonly string[], options: RunOptions = {}): CommandResult {
-  const result = spawnSync(command, [...args], {
-    cwd: options.cwd,
-    env: options.env,
-    encoding: 'utf8',
+  const result = execaSync(command, args, {
+    ...options,
+    extendEnv: false,
+    reject: false,
+    stripFinalNewline: false,
     // 'inherit' would leave nothing to capture, so the streams are piped and
     // echoed instead.
     stdio: ['inherit', 'pipe', 'pipe'],
   })
-  if (result.error !== undefined) throw result.error
+  if (result instanceof Error && (result.code !== undefined || result.isMaxBuffer)) throw result
   if (result.stdout !== '') process.stdout.write(result.stdout)
   if (result.stderr !== '') process.stderr.write(result.stderr)
-  return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+  return { status: result.exitCode ?? null, stdout: result.stdout, stderr: result.stderr }
 }
 
 /**
@@ -95,9 +98,11 @@ export function capture(command: string, args: readonly string[], options: RunOp
  * @param options - working directory and environment.
  */
 export function run(command: string, args: readonly string[], options: RunOptions = {}): void {
-  const result = spawnSync(command, [...args], { cwd: options.cwd, env: options.env, stdio: 'inherit' })
-  if (result.error !== undefined) throw result.error
-  if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} exited with ${String(result.status)}`)
+  const result = execaSync(command, args, {
+    ...options, extendEnv: false, stdio: 'inherit', reject: false,
+  })
+  if (result instanceof Error && (result.code !== undefined || result.isMaxBuffer)) throw result
+  if (result.exitCode !== 0) throw new Error(`${command} ${args.join(' ')} exited with ${String(result.exitCode ?? null)}`)
 }
 
 /**

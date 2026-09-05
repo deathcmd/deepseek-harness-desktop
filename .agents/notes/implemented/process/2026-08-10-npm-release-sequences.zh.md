@@ -16,6 +16,8 @@ Status: implemented
 
 ## 决策
 
+共享的[发布进程辅助函数](../../../../scripts/release/process.ts)使用仓库已有的 Execa 依赖，在 Windows 与 POSIX 上解析包管理器启动脚本。参数保持为独立值，而非拼接的 Shell 程序；捕获的输出流保留尾部换行和非零状态。这避免了在发布脚本中自行维护 Windows 批处理转义。[进程回归测试](../../../../scripts/release/process.spec.ts)覆盖含空格的启动脚本路径、字面元字符、捕获失败和无效工作目录。
+
 ### 三条独立序列
 
 `packages/`、`vendor/`、`native/` 各自一条 bump 序列、各自一次发布，不共享版本号、不共享触发、不互相等待。发 dsh 不重发 vendor，发 vendor 不重发 native。
