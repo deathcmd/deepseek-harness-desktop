@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import * as yaml from 'js-yaml'
 import { describe, expect, it } from 'vitest'
+import { parseCoveragePartitionCount } from './coverage-partitions.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const runnerPrivatePnpmDestination = '${{ runner.temp }}/setup-pnpm'
@@ -26,14 +27,17 @@ describe('CI workflow', () => {
     const workflow = loadWorkflow('.github/workflows/ci.yml')
     const budgets = {
       'node-24': { DSH_GATE_CONCURRENCY: ['8', '1'] },
-      'node-24-coverage': { DSH_COVERAGE_MAX_WORKERS: ['6', '2'], DSH_COVERAGE_PARTITIONS: ['4', '1'], DSH_GATE_CONCURRENCY: ['3', '1'] },
+      'node-24-coverage': { DSH_COVERAGE_MAX_WORKERS: ['6', '2'], DSH_COVERAGE_PARTITIONS: ['4', '2'], DSH_GATE_CONCURRENCY: ['3', '1'] },
       'node-24-consumers': { DSH_GATE_CONCURRENCY: ['8', '1'], DSH_OXLINT_THREADS: ['8', '2'], DSH_PUBLINT_CONCURRENCY: ['8', '2'], DSH_WEB_SNAPSHOT_WORKERS: ['6', '2'] },
-      'windows-native': { DSH_COVERAGE_MAX_WORKERS: ['6', '2'], DSH_COVERAGE_PARTITIONS: ['8', '1'], DSH_GATE_CONCURRENCY: ['4', '1'], DSH_PUBLINT_CONCURRENCY: ['8', '2'] },
+      'windows-native': { DSH_COVERAGE_MAX_WORKERS: ['6', '2'], DSH_COVERAGE_PARTITIONS: ['8', '2'], DSH_GATE_CONCURRENCY: ['4', '1'], DSH_PUBLINT_CONCURRENCY: ['8', '2'] },
     }
     for (const [name, budget] of Object.entries(budgets)) {
       const job = workflowJob(workflow, name)
       for (const [key, [upstream, portable]] of Object.entries(budget)) {
         expect(job.env).toHaveProperty(key, `\${{ ${upstreamOnly} && '${upstream}' || '${portable}' }}`)
+        if (key === 'DSH_COVERAGE_PARTITIONS') {
+          for (const value of [upstream, portable]) expect(parseCoveragePartitionCount(value)).toBe(Number(value))
+        }
       }
     }
     const consumers = workflowJob(workflow, 'node-24-consumers')
