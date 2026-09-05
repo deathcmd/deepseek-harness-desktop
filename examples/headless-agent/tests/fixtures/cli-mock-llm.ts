@@ -11,7 +11,7 @@ import {
 const HIGH = ReasoningEffortId('high')
 const OFF = ReasoningEffortId('off')
 
-/** Keyless headless-agent adapter: one real native-shell call followed by a final answer. */
+/** Keyless headless-agent adapter: one advertised shell call followed by a final answer. */
 class CliMockAdapter extends LlmAdapter {
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return {
@@ -35,7 +35,8 @@ class CliMockAdapter extends LlmAdapter {
     }
     const toolResult = options.messages.at(-1)?.content.find(block => block.type === 'tool-result')
     if (toolResult === undefined) {
-      const name = process.platform === 'win32' ? 'pwsh' : 'bash'
+      const name = options.tools?.find(tool => tool.name === 'bash' || tool.name === 'pwsh')?.name
+      if (name === undefined) throw new Error('CLI mock requires an advertised bash or pwsh tool.')
       const command = name === 'pwsh' ? '[Console]::Write("CLI_TOOL_ROUND_TRIP")' : 'printf CLI_TOOL_ROUND_TRIP'
       const args = JSON.stringify({ command, description: 'Prove the CLI tool round trip.' })
       yield { type: 'block-start', index: 0, blockType: 'tool-call' }
