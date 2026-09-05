@@ -25,6 +25,8 @@ packages:
 linkWorkspacePackages: true
 
 overrides:
+  # VitePress 1.x still requests the unpatched Vite 5 development server.
+  'vitepress>vite': '^6.4.3'
   '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
   '@deepseek-ai/schemastery': 'link:vendor/schemastery'
 
