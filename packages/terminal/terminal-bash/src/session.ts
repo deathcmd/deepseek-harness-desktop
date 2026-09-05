@@ -1,6 +1,7 @@
 /** Persistent PTY session over the subprocess seam's terminal primitive. */
 
 import { Buffer } from 'node:buffer'
+import xterm from '@xterm/headless'
 import type {
   SubprocessOutcome,
   SubprocessTerminalForeground,
@@ -158,6 +159,8 @@ export class LocalPtySession implements TerminalBackendSession {
   readonly pid: number
   private readonly decoder = new TextDecoder()
   private readonly sanitizer: TerminalSanitizer
+  private readonly terminalEmulator: xterm.Terminal | undefined
+  private terminalResponse: Promise<void> = Promise.resolve()
   private readonly scrollback: BoundedTextBuffer
   private readonly outputEnded = Promise.withResolvers<void>()
   private readonly completion: Promise<void>
@@ -190,6 +193,12 @@ export class LocalPtySession implements TerminalBackendSession {
     private readonly config: ResolvedConfig,
   ) {
     this.pid = terminal.pid
+    if (config.shellDialect === 'pwsh') {
+      // PowerShell and PSReadLine query the cursor even under TERM=dumb.
+      // Keep a viewport-sized protocol mirror; the bounded text buffers own history.
+      this.terminalEmulator = new xterm.Terminal({ cols: config.cols, rows: config.rows, scrollback: 0 })
+      this.terminalEmulator.onData(this.onTerminalResponse)
+    }
     this.sanitizer = new TerminalSanitizer(config.maxReadBytes)
     this.scrollback = new BoundedTextBuffer(config.scrollbackMaxBytes, config.scrollbackLines)
     terminal.output.on('data', this.onTerminalData)
@@ -204,15 +213,14 @@ export class LocalPtySession implements TerminalBackendSession {
   /**
    * Capture startup output through the same readiness contract as later sends.
    * @param signal - optional cancellation while the shell reaches its first prompt.
-   * @param bootstrap - optional command submitted once before waiting for startup readiness.
    * @returns Resolves after startup readiness; rejects on exit or readiness timeout.
    */
-  async initialize(signal?: AbortSignal, bootstrap?: string): Promise<void> {
+  async initialize(signal?: AbortSignal): Promise<void> {
     this.initializing = true
     try {
       const operation = this.startSend({
-        text: bootstrap ?? '',
-        submit: bootstrap !== undefined,
+        text: '',
+        submit: false,
         ...signal !== undefined ? { signal } : {},
       })
       const result = await operation.done
@@ -383,6 +391,7 @@ export class LocalPtySession implements TerminalBackendSession {
   }
 
   private onData(data: string): void {
+    if (!this.closing) this.terminalEmulator?.write(data)
     const sanitized = this.sanitizer.push(data)
     this.appendOutput(sanitized.text)
     if (sanitized.prompt) {
@@ -405,9 +414,21 @@ export class LocalPtySession implements TerminalBackendSession {
 
   private async onExit(outcome: SubprocessOutcome): Promise<void> {
     await this.outputEnded.promise
+    this.terminalEmulator?.dispose()
     if (this.transportFailure !== undefined) return
     this.statusValue = { kind: 'exited', exitCode: outcome.exitCode, signal: outcome.signal }
     this.settleActive('session_exit')
+  }
+
+  private readonly onTerminalResponse = (data: string): void => {
+    this.terminalResponse = this.terminalResponse.then(async () => {
+      if (this.closing || this.statusValue.kind === 'exited') return
+      try {
+        await this.terminal.write(data)
+      } catch (error: unknown) {
+        this.onTransportFailure(error)
+      }
+    })
   }
 
   private onTransportFailure(error: unknown): void {
@@ -560,6 +581,7 @@ export class LocalPtySession implements TerminalBackendSession {
     // it as session_exit below, so an in-flight send is never mis-settled as
     // stdin_read/inferred_idle/timeout during the grace period.
     this.stopPolling()
+    this.terminalEmulator?.dispose()
     try {
       await this.terminal.terminate()
     } catch (error: unknown) {
@@ -567,6 +589,7 @@ export class LocalPtySession implements TerminalBackendSession {
     }
     // Quiescence is the active send's terminal outcome.
     this.settleActive('session_exit')
+    await this.terminalResponse
     await this.completion
     this.terminal.output.off('data', this.onTerminalData)
     this.terminal.output.off('end', this.onTerminalEnd)

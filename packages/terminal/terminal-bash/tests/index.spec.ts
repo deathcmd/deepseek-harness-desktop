@@ -341,7 +341,7 @@ describe('BashTerminalBackend startup rollback', () => {
     await session.close('test complete')
   })
 
-  it('does not publish pwsh readiness from the echoed bootstrap before its prompt executes', async () => {
+  it('does not publish pwsh readiness from startup text containing the prompt source', async () => {
     vi.useFakeTimers()
     const ctx = new Context()
     const terminal = terminalHandle()
@@ -359,8 +359,10 @@ describe('BashTerminalBackend startup rollback', () => {
         published = true
         return session
       })
+      await vi.advanceTimersByTimeAsync(0)
+      terminal.output.emit('data', PWSH_PROMPT_SETUP + '\r\n')
       await vi.advanceTimersByTimeAsync(70)
-      expect(write).toHaveBeenCalledExactlyOnceWith(ENCODING_PREAMBLE + PWSH_PROMPT_SETUP + '\r')
+      expect(write).not.toHaveBeenCalled()
       expect(published).toBe(false)
       terminal.output.emit('data', '\r\n\x1b]133;D;0\x07dsh> ')
       await vi.advanceTimersByTimeAsync(10)
@@ -387,7 +389,9 @@ describe('BashTerminalBackend startup rollback', () => {
       () => session,
     )
     expect(await backend.spawn(spec(agent(ctx), signal))).toBe(session)
-    expect(initialize).toHaveBeenCalledExactlyOnceWith(signal, ENCODING_PREAMBLE + PWSH_PROMPT_SETUP)
+    expect(initialize).toHaveBeenCalledExactlyOnceWith(signal)
+    expect(spawned?.argv).toEqual(['pwsh', '-NoExit', '-EncodedCommand',
+      Buffer.from(ENCODING_PREAMBLE + PWSH_PROMPT_SETUP, 'utf16le').toString('base64')])
     expect(spawned?.env).toMatchObject({
       TERM: 'dumb', NO_COLOR: '1', DSH_SHELL: '1', DSH_SESSION_ID: 'agent', DSH_PTY_SESSION_ID: 'pty-1',
     })

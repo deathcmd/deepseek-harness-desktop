@@ -24,7 +24,7 @@ harness 在 Windows 上没有持久 shell。持久 `bash` 栈按构造就是 POS
 
 ### `@deepseek-ai/dsh-terminal-bash` 的 shell 方言
 
-一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`，存量部署逐字节不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 无法从环境安装提示符，因此一次会话初始化会提交 prompt 函数与编码前缀，并使用同一个绝对期限。引导命令的回显含有提示符字面量，但不能证明就绪；会话会等待 OSC 标记与精确的可打印尾部，或者先确认独占末行的提示符再接受无标记就绪。`session_exit` 或 `timeout` 结算会拒绝 spawn，不会续期或重新提交引导命令。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 sanitizer、`PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑原样复用——标记仍只是就绪信号、载荷不被消费，与 bash 路径完全一致，且没有新增模型通知通道（与当前实现对齐；延后的 BEL 事件通道保持延后）。
+一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`，存量部署逐字节不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 通过后端自有的 `-NoExit -EncodedCommand` 参数安装 prompt 函数与编码前缀，避免控制台初始化前的 stdin 回显与规范模式换行转换。仅保留视口的[无界面终端](https://github.com/xtermjs/xterm.js/blob/master/typings/xterm-headless.d.ts)回应 PowerShell 与 PSReadLine 即使在 `TERM=dumb` 下仍会发出的光标位置查询。回应使用既有子进程句柄，纳入错误传播与清理。启动保留同一个绝对期限；输出引用提示符源码不能证明就绪；会话会等待 OSC 标记与精确的可打印尾部，或者先确认独占末行的提示符再接受无标记就绪。`session_exit` 或 `timeout` 结算会拒绝 spawn，不会续期或重新提交引导命令。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 sanitizer、`PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑原样复用——标记仍只是就绪信号、载荷不被消费，与 bash 路径完全一致，且没有新增模型通知通道（与当前实现对齐；延后的 BEL 事件通道保持延后）。
 
 ### `@deepseek-ai/dsh-tool-pwsh-persistent`
 
@@ -42,6 +42,7 @@ terminal-bash 的配置、生命周期与 sanitizer 套件会在 Windows 上运�
 
 ## 备选方案
 
+- **硬编码光标回应或非交互 shell。** 拒绝：固定的 `1;1` 回应在输出或光标移动后便不准确，而 `-NonInteractive` 会移除 `Read-Host`。受维护的无界面解析器负责光标跟踪与分块转义序列；既有 sanitizer 仍负责面向行的输出。
 - **独立的 `pty-pwsh-local` backend 包。** 拒绝：本地 session、sanitizer、就绪档位和沙箱栅栏是共享机制；为一个 config 字段复制 500 行 session 换来的是一包复制粘贴，与 bash 组并置薄 executor 的情形不同。
 - **tasklist 或 wmic 轮询进程树。** 拒绝：`inspectForeground` 每次就绪轮询（约 50ms）都跑，每 tick 生成一次探测进程不可行；wmic 已从现行 Windows 移除。koffi + Toolhelp32 是进程内、廉价的。
 - **为 SIGINT 加原生 helper 或 `GenerateConsoleCtrlEvent`。** 拒绝：向 ConPTY 输入写 `\x03` 即可中断运行中的命令（已实测），零新增代码。语义差异——在提示符处 `\x03` 取消当前行而不是给进程发信号——文档化而不是绕开。
@@ -54,7 +55,7 @@ terminal-bash 的配置、生命周期与 sanitizer 套件会在 Windows 上运�
 
 **Windows 成为一等公民的持久 shell 宿主。** 持久 pwsh 栈在 windows-native 车道上运行并受覆盖门禁约束；一次性/持久 shell 的划分与 POSIX 镜像，预设 spec 在两种平台上都钉死每宿主恰好一个 shell 栈。
 
-**Windows 覆盖包含共享终端后端。** `terminal-bash` 与 `tool-pwsh-persistent` 会在 Windows 上运行平台无关套件与真实 pwsh 场景。引导回显回归与无提示符期限用例覆盖可用 shell 出现之前的启动过程；完整 Loader 与 ACP 场景保留模型可见输出检查。
+**Windows 覆盖包含共享终端后端。** `terminal-bash` 与 `tool-pwsh-persistent` 会在 Windows 上运行平台无关套件与真实 pwsh 场景。提示符源码拒绝、无提示符期限、分块光标查询、回应失败与在途回应清理用例覆盖启动及协议所有权；真实 pwsh 还会保留 `Read-Host` 输入；完整 Loader 与 ACP 场景保留模型可见输出检查。
 
 **Windows 就绪弱于 Linux。** 伪 pgid marker 快路径覆盖 shell 提示符，但没有提示符的子进程按静默档结算（约 3s），与 macOS 完全一致；没有精确的 stdin-wait 档。
 

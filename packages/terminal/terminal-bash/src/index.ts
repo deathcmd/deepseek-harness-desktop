@@ -5,6 +5,7 @@
  */
 
 import { Context } from '@deepseek-ai/cordis'
+import { Buffer } from 'node:buffer'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { TerminalBackendCleanupError } from '@deepseek-ai/dsh-terminal'
@@ -91,6 +92,11 @@ export const PWSH_PROMPT_SETUP =
 
 function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutionPolicy): string[] {
   const argv = [config.shellPath, ...config.shellArgs]
+  if (config.shellDialect === 'pwsh') {
+    // Stdin may still be in canonical mode before pwsh initializes its console.
+    // Startup code belongs in argv, not input that the kernel can echo or rewrite.
+    argv.push('-NoExit', '-EncodedCommand', Buffer.from(ENCODING_PREAMBLE + PWSH_PROMPT_SETUP, 'utf16le').toString('base64'))
+  }
   if (policy.mode === 'danger-full-access') return argv
   const sandbox = ctx.get('sandbox')
   if (sandbox === undefined) {
@@ -105,14 +111,10 @@ function spawnArgv(ctx: Context, config: ResolvedConfig, policy: SandboxExecutio
 // session already owns the send lifecycle the race protects.
 async function startupSession(
   session: LocalPtySession,
-  dialect: ShellDialect,
   signal?: AbortSignal,
 ): Promise<void> {
-  const start = (): Promise<void> => dialect === 'pwsh'
-    ? session.initialize(signal, ENCODING_PREAMBLE + PWSH_PROMPT_SETUP)
-    : session.initialize(signal)
   if (signal === undefined) {
-    await start()
+    await session.initialize(signal)
     return
   }
   const aborted = Promise.withResolvers<never>()
@@ -120,7 +122,7 @@ async function startupSession(
   signal.addEventListener('abort', onAbort, { once: true })
   try {
     signal.throwIfAborted()
-    await Promise.race([start(), aborted.promise])
+    await Promise.race([session.initialize(signal), aborted.promise])
   } finally {
     signal.removeEventListener('abort', onAbort)
   }
@@ -161,7 +163,7 @@ export class BashTerminalBackend implements TerminalBackend {
     })
     const session = this.createSession(terminal, this.config)
     try {
-      await startupSession(session, this.config.shellDialect, spec.signal)
+      await startupSession(session, spec.signal)
       return session
     } catch (error) {
       try {
