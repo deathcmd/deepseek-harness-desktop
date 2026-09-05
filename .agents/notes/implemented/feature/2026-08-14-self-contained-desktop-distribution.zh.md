@@ -14,7 +14,11 @@ monorepo 中的包依赖工作区关系、对等依赖（peer dependency）、�
 
 [`apps/desktop`](../../../../apps/desktop/README.md) 是 Electron 壳，它使用 Electron 内置的 Node.js 运行时启动已发布的 `@deepseek-ai/dsh` CLI（命令行界面）入口，将 `dsh web` 绑定至随机回环端口，等待成功的 HTTP 响应，然后在沙箱化 renderer 中加载未经修改的 Web 应用。该发行版有意复用 [GUI 分层决策](../architecture/2026-07-19-gui-layering-and-rpc-protocol.md)中描述的 Web 载体；桌面壳不添加 IPC 客户端，也不重新装配 Harness 插件。
 
-`apps/desktop-runtime` 把官方 CLI 声明为唯一的生产依赖根，因此桌面运行时会自动跟随 CLI 当前的 bundle 与插件依赖图。准备脚本使用 pnpm 的 legacy hoisted 部署布局，移除非生产源码产物后把无链接依赖闭包写入独立的 `runtime.asar`。原生 addon 与子进程 helper 放在相邻的 `runtime.asar.unpacked`；一个很小的外置启动器使用 Electron 内置 Node.js 从归档导入 CLI。运行时链接不会指向源码检出目录。安装状态与 NPM 缓存位于 Electron 的单用户数据目录中，初始工作区则保持为用户主目录，除非 `DSH_DESKTOP_WORKSPACE` 覆盖该设置。
+`apps/desktop-runtime` 是仅含 manifest（元数据清单）的部署根，声明官方 CLI 与随应用发布的 Harness 包。准备脚本使用 pnpm 的 legacy hoisted 部署布局，移除非生产源码产物后把无链接依赖闭包写入独立的 `runtime.asar`。原生 addon 与子进程 helper 放在相邻的 `runtime.asar.unpacked`；一个很小的外置启动器使用 Electron 内置 Node.js 从归档导入 CLI。运行时链接不会指向源码检出目录。安装状态与 NPM 缓存位于 Electron 的单用户数据目录中，初始工作区则保持为用户主目录，除非 `DSH_DESKTOP_WORKSPACE` 覆盖该设置。
+
+桌面[运行时辅助函数](../../../../apps/desktop/src/runtime.mjs)区分源码检出根目录与安装归档，并在启动期限内限制每次 HTTP 就绪探测的等待时间。停滞的 HTTP 连接不能让启动无限等待。数字退出码与终止信号都表示子进程已经结束。
+
+发布规则显式包含两个桌面源码模块。Knip 将外置启动器与解析器视为进程入口，并将仅含 manifest 的部署工作区排除在导入使用分析之外，与 Python 部署工作区保持一致；打包与运行时检查仍会验证其依赖。
 
 应用关闭时会终止官方 CLI 的完整进程树，并等待其退出后再关闭 Electron。Windows 使用 `taskkill /T`；macOS 和 Linux 使用独立进程组，先进行有时限的优雅关闭，随后强制终止。
 

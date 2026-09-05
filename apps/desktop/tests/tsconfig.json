@@ -1,0 +1,10 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "composite": false,
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": ["*.spec.ts", "../src/runtime.mjs"]
+}
