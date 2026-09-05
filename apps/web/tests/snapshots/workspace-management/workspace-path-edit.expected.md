@@ -1,0 +1,1 @@
+- textbox "Edit path": {{cwd}}

@@ -56,7 +56,11 @@ const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta
 const reasoningConfigPath = fileURLToPath(new URL('./fixtures/cli.cordis.yml', import.meta.url))
 const deepseekDefaultsConfigPath = fileURLToPath(new URL('./fixtures/deepseek-defaults.cordis.yml', import.meta.url))
 const headlessOverlayPath = fileURLToPath(new URL('./fixtures/headless-profile.cordis.yml', import.meta.url))
-const headlessSessionExpected = join(snapshotsDir, 'headless-profile', 'session.expected.jsonl')
+const headlessSessionExpected = join(
+  snapshotsDir,
+  'headless-profile',
+  process.platform === 'win32' ? 'session.win32.expected.jsonl' : 'session.expected.jsonl',
+)
 const headlessFailureExpected = join(snapshotsDir, 'headless-profile', 'stderr.expected.txt')
 const cliMockLlmPluginPath = fileURLToPath(new URL('./fixtures/cli-mock-llm.ts', import.meta.url))
 const refreshing = process.env.DSH_SNAPSHOT === 'refresh'
@@ -86,21 +90,14 @@ async function deepseekDefaultsServer(): Promise<DeepSeekDefaultsServer> {
     request.on('end', () => {
       requests.push(JSON.parse(body) as JsonObject)
       response.writeHead(200, { 'content-type': 'text/event-stream' })
-      let keepAlives = 3
-      const write = (): void => {
-        if (keepAlives-- > 0) {
-          response.write(': keep-alive\n\n')
-          setTimeout(write, 60)
-          return
-        }
-        response.end([
-          'data: {"choices":[{"delta":{"content":"DEFAULTS_OK"}}]}',
-          'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}',
-          'data: [DONE]',
-          '',
-        ].join('\n\n'))
-      }
-      setTimeout(write, 60)
+      // Exact watchdog timing is covered by the adapter's controlled-clock tests.
+      response.write(': keep-alive\n\n')
+      response.end([
+        'data: {"choices":[{"delta":{"content":"DEFAULTS_OK"}}]}',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}',
+        'data: [DONE]',
+        '',
+      ].join('\n\n'))
     })
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -516,7 +513,7 @@ describe('headless stream-json snapshots', () => {
     `)
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 
-  it('keeps provider comments alive and sends DeepSeek defaults through the one-shot app', async () => {
+  it('accepts provider comments and sends DeepSeek defaults through the one-shot app', async () => {
     const server = await deepseekDefaultsServer()
     try {
       const result = await runLoaderSmoke({
@@ -543,7 +540,14 @@ describe('headless stream-json snapshots', () => {
       expect(server.requests).toHaveLength(1)
       expect(server.requests[0]?.max_tokens).toBe(256_000)
       expect(server.requests[0]?.reasoning_effort).toBe('low')
-      const header = (parseJsonl(result.stdout)
+      const records = parseJsonl(result.stdout)
+      expect(records.at(-1)).toMatchObject({
+        type: 'result',
+        output: 'DEFAULTS_OK',
+        usage: { inputTokens: 3, outputTokens: 1 },
+      })
+      expect(result.stdout).not.toContain('keep-alive')
+      const header = (records
         .map(record => record.event)
         .find((event): event is JsonObject => (
           event !== null

@@ -939,7 +939,6 @@ for line in sys.stdin:
         break
 """.strip()
     )
-    runtime.chmod(0o755)
 
     default_config = tmp_path / "default-cordis.yml"
     module_dir = tmp_path / "deepseek_harness_runtime"
@@ -947,7 +946,7 @@ for line in sys.stdin:
     (module_dir / "__init__.py").write_text(
         f"""
 def resolve_bundled_launch_args(mode=None):
-    return ({str(runtime)!r},)
+    return ({sys.executable!r}, {str(runtime)!r})
 
 
 def bundled_default_config_path():

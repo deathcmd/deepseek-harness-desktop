@@ -4,25 +4,16 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { hasChildExited, resolveRuntimePaths, waitForServer } from './runtime.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isPackaged = app.isPackaged
-const runtimeRoot = isPackaged
-  ? join(process.resourcesPath, 'runtime.asar')
-  : join(__dirname, '..', '..')
-const runtimeLauncher = isPackaged
-  ? join(process.resourcesPath, 'runtime-launcher.cjs')
-  : join(__dirname, '..', 'resources', 'runtime-launcher.cjs')
-const runtimeResolver = isPackaged
-  ? join(process.resourcesPath, 'runtime-resolver.mjs')
-  : join(__dirname, '..', 'resources', 'runtime-resolver.mjs')
-const dshEntry = isPackaged
-  ? join(runtimeRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
-  : join(runtimeRoot, 'apps', 'cli', 'lib', 'bin.js')
-const applicationIconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
-const applicationIcon = isPackaged
-  ? join(process.resourcesPath, applicationIconName)
-  : join(__dirname, '..', 'resources', applicationIconName)
+const { runtimeLauncher, runtimeResolver, dshEntry, applicationIcon } = resolveRuntimePaths({
+  isPackaged,
+  resourcesPath: process.resourcesPath,
+  sourceDirectory: __dirname,
+  platform: process.platform,
+})
 const defaultWorkspace = process.env.DSH_DESKTOP_WORKSPACE || app.getPath('home')
 
 let mainWindow
@@ -69,28 +60,8 @@ function reservePort() {
   })
 }
 
-/** Wait until the official Web server returns a successful response. */
-async function waitForServer(url, child) {
-  const deadline = Date.now() + 90_000
-  let lastError
-  while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
-      throw new Error(`The official dsh web process exited with code ${child.exitCode}`)
-    }
-    try {
-      const response = await fetch(url)
-      if (response.ok) return
-      lastError = new Error(`dsh web returned HTTP ${response.status}`)
-    } catch (error) {
-      lastError = error
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error(`Timed out waiting for ${url}: ${lastError?.message || 'unknown error'}`)
-}
-
 async function waitForExit(child, timeoutMs) {
-  if (child.exitCode !== null) return true
+  if (hasChildExited(child)) return true
   return new Promise((resolve) => {
     const finish = (exited) => {
       clearTimeout(timer)
@@ -119,7 +90,7 @@ function waitForTaskkill(killer, fallback) {
 /** Stop the official Harness process tree and wait for it to exit. */
 async function stopDsh() {
   const child = dshProcess
-  if (!child || child.exitCode !== null) return
+  if (!child || hasChildExited(child)) return
   if (process.platform === 'win32') {
     const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
       windowsHide: true,

@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { pathToFileURL } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
+import { setTimeout as delay } from 'node:timers/promises'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import SessionStore, { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
@@ -37,6 +38,8 @@ import {
 import { SqliteStore } from '../src/store.ts'
 import { sql } from '../src/sql.ts'
 import { testSql } from './test-sql.ts'
+
+vi.mock('node:timers/promises', { spy: true })
 
 const dirs: string[] = []
 afterEach(async () => {
@@ -445,13 +448,23 @@ describe('SessionPersistenceSqlite schema ownership', () => {
         : undefined
     })
 
-    const db = await openDatabase(BusyOnceDatabase, path, 'wal', 100)
-    expect(attempts).toBe(2)
-    expect(db.prepare(sql('journal-mode-wal')).get()).toEqual({ journal_mode: 'wal' })
-    expect(db.prepare(sql('select-trusted-schema')).get()).toEqual({ trusted_schema: 0 })
-    expect(db.prepare(sql('select-mmap-size')).get()).toEqual({ mmap_size: 0 })
-    expect(db.prepare(sql('select-synchronous')).get()).toEqual({ synchronous: 2 })
-    db.close()
+    let elapsed = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
+    const wait = vi.mocked(delay).mockClear().mockImplementation(async (ms = 0) => { elapsed += ms })
+    let db: DatabaseSync | undefined
+    try {
+      db = await openDatabase(BusyOnceDatabase, path, 'wal', 100)
+      expect(attempts).toBe(2)
+      expect(wait.mock.calls).toEqual([[10]])
+      expect(db.prepare(sql('journal-mode-wal')).get()).toEqual({ journal_mode: 'wal' })
+      expect(db.prepare(sql('select-trusted-schema')).get()).toEqual({ trusted_schema: 0 })
+      expect(db.prepare(sql('select-mmap-size')).get()).toEqual({ mmap_size: 0 })
+      expect(db.prepare(sql('select-synchronous')).get()).toEqual({ synchronous: 2 })
+    } finally {
+      db?.close()
+      wait.mockRestore()
+      clock.mockRestore()
+    }
   })
 
   it('does not retry journal failures outside the available busy budget', async () => {
@@ -497,20 +510,30 @@ describe('SessionPersistenceSqlite schema ownership', () => {
     expect(attempts).toBe(1)
   })
 
-  it('paces repeated busy journal-mode attempts', async () => {
-    let attempts = 0
+  it.each([
+    { budget: 50, times: [0, 10, 20, 30, 40], delays: [10, 10, 10, 10, 10] },
+    { budget: 25, times: [0, 10, 20], delays: [10, 10, 5] },
+  ])('paces repeated busy journal-mode attempts within a $budget ms budget', async ({ budget, times, delays }) => {
+    const path = await freshDbPath('dsh-sqlite-journal-paced-')
+    let elapsed = 0
+    const attempts: number[] = []
     const BusyDatabase = databaseWithJournalFailure(() => {
-      attempts += 1
+      attempts.push(elapsed)
+      // Bound a missing-delay regression even when the controlled clock cannot advance.
+      expect(attempts.length).toBeLessThanOrEqual(times.length)
       return Object.assign(new Error('database is locked'), { errcode: 5 })
     })
-    await expect(openDatabase(
-      BusyDatabase,
-      await freshDbPath('dsh-sqlite-journal-paced-'),
-      'wal',
-      50,
-    )).rejects.toThrow('database is locked')
-    expect(attempts).toBeGreaterThan(1)
-    expect(attempts).toBeLessThanOrEqual(6)
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
+    const wait = vi.mocked(delay).mockClear().mockImplementation(async (ms = 0) => { elapsed += ms })
+    try {
+      await expect(openDatabase(BusyDatabase, path, 'wal', budget)).rejects.toThrow('database is locked')
+      expect(attempts).toEqual(times)
+      expect(wait.mock.calls).toEqual(delays.map(ms => [ms]))
+      expect(elapsed).toBe(budget)
+    } finally {
+      wait.mockRestore()
+      clock.mockRestore()
+    }
   })
 
   it('rejects unversioned, incompatible, and foreign-application databases', async () => {

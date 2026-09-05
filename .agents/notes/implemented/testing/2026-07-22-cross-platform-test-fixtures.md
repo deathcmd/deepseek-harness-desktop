@@ -14,6 +14,10 @@ Treating fixture syntax as product behavior either reports false regressions or 
 
 Tests of platform-neutral behavior construct absolute paths and `file:` URIs with the host's `node:path` and `node:url` APIs, then assert native absolute output or stable workspace-relative output as the contract requires. Invalid-URI fixtures use encodings rejected by `fileURLToPath()` on every supported platform.
 
+The Web [seed fixture helper](../../../../apps/web/tests/scaffold.ts) substitutes JSON-escaped strings so native backslashes and quoted directory names survive parsing and repeated realization. The [built boot snapshot](../../../../apps/web/tests/built-boot.snapshot.ts) checks branding against the recorded client build profile, preserving both local and official build expectations.
+
+Python [SDK peer fixtures](../../../../python/sdk/tests/test_client.py) launch scripts through `sys.executable` rather than relying on POSIX shebang execution. The fake bundled-runtime resolver still exercises the default launch and configuration-selection paths on every host.
+
 Transport-failure tests inject the connection's message writer and deliver the same asynchronous write callback error that a real Node stream would report. The production writer still writes framed messages to child stdin. This keeps a real child alive while the test deterministically distinguishes transport failure from process exit without reaching into platform-specific pipe handles.
 
 Language-server teardown targets the whole descendant tree through a negative process-group id on POSIX and synchronous `taskkill /T /F` on Windows. Windows suppresses only taskkill's already-absent-tree status; command, permission, and other tree-kill failures remain teardown failures. A read-only provider query retries once only when its selected pooled transport fails before or during that query; errors from a still-live server are not replayed. Terminal tests wait for their observable rendered output instead of assuming one event-loop turn is sufficient.

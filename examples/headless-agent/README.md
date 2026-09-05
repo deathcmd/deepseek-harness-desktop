@@ -17,6 +17,8 @@ The product command is [`dsh --profile headless`](../../apps/cli/README.md): it 
 
 Snapshot suites run this directory's configuration through [`tests/fixtures/headless-driver.ts`](tests/fixtures/headless-driver.ts), an unexported test-only process that emits canonical session events as JSONL before its result record. That stream is test infrastructure, not a supported CLI output format. Child sessions surface only through parent tool events and results.
 
+The shared keyless CLI adapter calls the first `bash` or `pwsh` tool advertised by the active composition and fails if neither is present. The product-profile snapshot therefore calls the shipped native shell: `pwsh` on Windows and `bash` elsewhere; Bash-only example compositions keep using `bash` on every host. Separate Windows and POSIX expected transcripts retain the actual tool names and commands instead of normalizing away their differences. The [tool-selection Agent Note](../../.agents/notes/implemented/bug-fix/2026-09-06-cli-smoke-tool-composition.md) records the rationale.
+
 ## E2B POC overlay
 
 [`e2b.cordis.yml`](e2b.cordis.yml) replaces the local filesystem and subprocess providers with one shared E2B sandbox while retaining `dsh-bash-local` and the same model-facing tools. Put `E2B_API_KEY` beside `DEEPSEEK_API_KEY` in the gitignored root `.env`, then run the credential-gated live composition, which drives FS, Bash, PTY, and LSP in one sandbox and proves final deletion:

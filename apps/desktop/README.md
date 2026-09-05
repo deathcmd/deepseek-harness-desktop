@@ -12,6 +12,8 @@ The application stores `DSH_HOME` and its npm cache under Electron's per-user `u
 
 Closing Electron terminates the complete `dsh web` process tree and waits for it to exit before the application closes.
 
+Source launches resolve `apps/cli/lib/bin.js` from the checkout root; installed launches resolve the CLI inside `runtime.asar`. Readiness probes have a one-second request timeout within the 90-second startup deadline. A numeric exit code or terminating signal ends the wait.
+
 ## Development
 
 Build the official packages before launching the desktop shell from the repository root:

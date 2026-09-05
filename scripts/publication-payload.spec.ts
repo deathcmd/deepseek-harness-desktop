@@ -5,13 +5,26 @@ import {
   validateTarballPayload,
 } from './publication-payload.ts'
 
-function validateFixtureTarball(files: readonly string[]): () => void {
+function validateFixtureTarball(files: readonly string[], context = 'fixture.tgz'): () => void {
   return () => {
-    validateTarballPayload(files, 'fixture.tgz')
+    validateTarballPayload(files, context)
   }
 }
 
 describe('publication payload policy', () => {
+  it('accepts only the two required desktop source modules in the desktop package', () => {
+    expect(validateFixtureTarball([
+      'package/src/main.mjs',
+      'package/src/runtime.mjs',
+    ], '@deepseek-ai/dsh-desktop')).not.toThrow()
+    expect(validateFixtureTarball([
+      'package/src/runtime.mjs',
+    ], '@deepseek-ai/dsh-other')).toThrow('publishes source file')
+    for (const file of ['package/src/debug.mjs', 'package/src/main.mjs.map', 'package/lib/main.js.map']) {
+      expect(validateFixtureTarball([file], '@deepseek-ai/dsh-desktop')).toThrow()
+    }
+  })
+
   it.each([
     'lib/index.js',
     'lib/types/index.d.ts',

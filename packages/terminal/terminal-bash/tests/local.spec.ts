@@ -279,13 +279,15 @@ const hasPwsh = spawnSync(
   { encoding: 'utf8' },
 ).status === 0
 
+// Use the deployed silence budget: first-use PowerShell cmdlet imports can
+// exceed the fast Bash fixture's subsecond fallback without completing a command.
 describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
   it('bootstraps a persistent pwsh, persists state, and scrubs secrets', async () => {
     const previous = process.env.DSH_TEST_SECRET
     process.env.DSH_TEST_SECRET = 'must-not-leak'
     try {
       const { ctx, root, agent } = await harness('danger-full-access', {
-        idleSilenceMs: 300,
+        idleSilenceMs: 3_000,
         handoffGraceMs: 300,
         timeoutMs: 8_000,
       }, 'pwsh')
@@ -296,7 +298,7 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
         text: '$env:KEEP = "ok"; Set-Location /',
         submit: true,
       })
-      expect((await first.done).waitReason).toBe('stdin_read')
+      expectReadyForNextSend((await first.done).waitReason)
       const second = ctx.terminals.startSend(agent, created.sessionId, {
         text: 'Write-Output "keep=$env:KEEP secret=$env:DSH_TEST_SECRET"',
         submit: true,
@@ -315,9 +317,30 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
     }
   }, 30_000)
 
+  it('keeps Read-Host interactive after the argv bootstrap', async () => {
+    const { ctx, agent } = await harness('danger-full-access', {
+      idleSilenceMs: 3_000,
+      handoffGraceMs: 300,
+      timeoutMs: 8_000,
+    }, 'pwsh')
+    const created = await ctx.terminals.spawn(agent, { type: 'shell' })
+    const question = ctx.terminals.startSend(agent, created.sessionId, {
+      text: "$answer = Read-Host -Prompt 'INPUT_READY'; Write-Output ('ANSWER=' + $answer)",
+      submit: true,
+    })
+    const waiting = await question.done
+    expectReadyForNextSend(waiting.waitReason)
+    expect(waiting.viewport).toContain('INPUT_READY')
+    const answer = ctx.terminals.startSend(agent, created.sessionId, { text: 'hello', submit: true })
+    const result = await answer.done
+    expectReadyForNextSend(result.waitReason)
+    expect(result.viewport).toContain('ANSWER=hello')
+    await ctx.terminals.kill(agent, created.sessionId)
+  }, 30_000)
+
   it('pins UTF-8 output encoding so non-ASCII output survives the byte decode', async () => {
     const { ctx, root, agent } = await harness('danger-full-access', {
-      idleSilenceMs: 300,
+      idleSilenceMs: 3_000,
       handoffGraceMs: 300,
       timeoutMs: 8_000,
     }, 'pwsh')

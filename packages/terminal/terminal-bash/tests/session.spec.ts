@@ -216,6 +216,25 @@ describe('LocalPtySession readiness and output', () => {
     expect(operation.cancel()).toBe(false)
   })
 
+  it('does not mistake a PowerShell terminal-query read for command readiness', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    await initialize(session, terminal)
+    const operation = session.startSend({ text: 'Get-Date', submit: true })
+    let settled = false
+    void operation.done.then(() => { settled = true })
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.inspector.waiting = true
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(30)
+    expect(settled).toBe(false)
+    terminal.emitData('completed\r\n\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await operation.done).toMatchObject({ waitReason: 'stdin_read', viewport: 'completed\ndsh> ' })
+    await session.close('test complete')
+  })
+
   it('does not reuse a pre-write stdin wait as post-write readiness', async () => {
     vi.useFakeTimers()
     const terminal = new FakeTerminal()
@@ -793,6 +812,101 @@ describe('LocalPtySession readiness and output', () => {
     controller.abort(reason)
 
     await rejected
+  })
+
+  it('keeps one pwsh startup deadline when output only quotes the prompt source', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const bootstrap = "function prompt { 'dsh> ' }"
+    const timedOut = expect(session.initialize()).rejects.toThrow('startup timeout')
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitData(bootstrap + '\r\n')
+    terminal.inspector.waiting = true
+    await vi.advanceTimersByTimeAsync(100)
+    await timedOut
+    expect(terminal.writes).toEqual([])
+    await session.close('test complete')
+  })
+
+  it.each(['dsh> ', 'Console access denied\r\ndsh> '])('accepts a standalone pwsh prompt without a Console marker (%s)', async (output) => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const initialized = session.initialize()
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitData(output)
+    await vi.advanceTimersByTimeAsync(60)
+    await initialized
+    expect(session.motd).toContain('dsh> ')
+    await session.close('test complete')
+  })
+
+  it('rejects a pwsh bootstrap whose shell exits before its first prompt', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const exited = expect(session.initialize()).rejects.toThrow('exited during startup')
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.emitExit(1)
+    await exited
+    await session.close('test complete')
+  })
+
+  it('answers split PowerShell cursor queries using the current viewport position', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const initialized = session.initialize()
+    terminal.emitData('\x1b[3;5H\x1b[')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(terminal.writes).toEqual([])
+    terminal.emitData('6n')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(terminal.writes).toEqual(['\x1b[3;5R'])
+    terminal.emitData('\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    await initialized
+    expect(session.motd).toBe('dsh> ')
+    await session.close('test complete')
+  })
+
+  it('propagates failed terminal query replies through startup and cleanup', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    terminal.throwWrite = true
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    const rejected = expect(session.initialize()).rejects.toThrow('write failed')
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(10)
+    await rejected
+    expect(session.status().kind).toBe('exited')
+    await expect(session.close('failed reply')).rejects.toThrow('write failed')
+  })
+
+  it.each(['close', 'exit'] as const)('drains in-flight replies and drops queued queries after %s', async (stop) => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const pendingWrite = Promise.withResolvers<undefined>()
+    const write = vi.spyOn(terminal, 'write').mockImplementation(() => pendingWrite.promise)
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    terminal.emitData('\x1b[6n\x1b[6n')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(write).toHaveBeenCalledExactlyOnceWith('\x1b[1;1R')
+    let closed = false
+    const closing = stop === 'close'
+      ? session.close('drain replies').then(() => { closed = true })
+      : undefined
+    if (stop === 'exit') terminal.emitExit()
+    // The provider can deliver its final output while termination is pending.
+    terminal.output.emit('data', '\x1b[6n')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(closed).toBe(false)
+    pendingWrite.resolve(undefined)
+    await vi.advanceTimersByTimeAsync(10)
+    await closing
+    expect(write).toHaveBeenCalledTimes(1)
+    await session.close('test complete')
   })
 
   it('waits for printable prompt text when the startup marker is split from PS1', async () => {

@@ -16,6 +16,8 @@ Two hard blockers sat in the way. All 217 workspace manifests set `private: true
 
 ## Decision
 
+The shared [release process helpers](../../../../scripts/release/process.ts) use the repository's existing Execa dependency to resolve package-manager shims across Windows and POSIX. Arguments remain separate values rather than concatenated shell programs; captured streams retain their trailing newlines and nonzero statuses. This avoids maintaining Windows batch escaping in the release scripts. [Process regressions](../../../../scripts/release/process.spec.ts) exercise spaced shim paths, literal metacharacters, captured failures, and invalid working directories.
+
 ### Three independent sequences
 
 `packages/`, `vendor/`, and `native/` each have one bump sequence and one publication, sharing no version, no trigger, and no waiting. Releasing dsh does not republish vendor; releasing vendor does not republish native.

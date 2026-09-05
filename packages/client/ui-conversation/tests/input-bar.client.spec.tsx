@@ -734,6 +734,25 @@ describe('running and lock semantics', () => {
     expect(document.activeElement).toBe(textarea)
   })
 
+  it.each(['dialog', 'alertdialog'])('mount, unlock, and session changes preserve an open modal %s', (role) => {
+    const modal = render(<div role={role} aria-modal="true"><input aria-label="Path" /></div>)
+    const path = modal.getByLabelText('Path')
+    path.focus()
+    const mounted = bench()
+    expect(document.activeElement).toBe(path)
+
+    const locked = bench({ disabled: true })
+    act(() => { locked.session.set(snapshotOf({ removed: false })) })
+    expect(document.activeElement).toBe(path)
+    locked.view.rerender(<InputBar {...locked.props} sessionId={'s2' as SessionId} />)
+    expect(document.activeElement).toBe(path)
+
+    modal.unmount()
+    locked.view.rerender(<InputBar {...locked.props} sessionId={'s3' as SessionId} />)
+    expect(document.activeElement).toBe(locked.textarea)
+    mounted.view.unmount()
+  })
+
   it('typing forwards through the machine (draft state echoes back)', () => {
     const { textarea, wiring } = bench()
     fireEvent.change(textarea, { target: { value: 'typed' } })

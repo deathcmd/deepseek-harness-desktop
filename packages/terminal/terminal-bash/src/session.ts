@@ -1,6 +1,7 @@
 /** Persistent PTY session over the subprocess seam's terminal primitive. */
 
 import { Buffer } from 'node:buffer'
+import xterm from '@xterm/headless'
 import type {
   SubprocessOutcome,
   SubprocessTerminalForeground,
@@ -158,6 +159,8 @@ export class LocalPtySession implements TerminalBackendSession {
   readonly pid: number
   private readonly decoder = new TextDecoder()
   private readonly sanitizer: TerminalSanitizer
+  private readonly terminalEmulator: xterm.Terminal | undefined
+  private terminalResponse: Promise<void> = Promise.resolve()
   private readonly scrollback: BoundedTextBuffer
   private readonly outputEnded = Promise.withResolvers<void>()
   private readonly completion: Promise<void>
@@ -190,6 +193,12 @@ export class LocalPtySession implements TerminalBackendSession {
     private readonly config: ResolvedConfig,
   ) {
     this.pid = terminal.pid
+    if (config.shellDialect === 'pwsh') {
+      // PowerShell and PSReadLine query the cursor even under TERM=dumb.
+      // Keep a viewport-sized protocol mirror; the bounded text buffers own history.
+      this.terminalEmulator = new xterm.Terminal({ cols: config.cols, rows: config.rows, scrollback: 0 })
+      this.terminalEmulator.onData(this.onTerminalResponse)
+    }
     this.sanitizer = new TerminalSanitizer(config.maxReadBytes)
     this.scrollback = new BoundedTextBuffer(config.scrollbackMaxBytes, config.scrollbackLines)
     terminal.output.on('data', this.onTerminalData)
@@ -209,7 +218,11 @@ export class LocalPtySession implements TerminalBackendSession {
   async initialize(signal?: AbortSignal): Promise<void> {
     this.initializing = true
     try {
-      const operation = this.startSend({ text: '', submit: false, ...signal !== undefined ? { signal } : {} })
+      const operation = this.startSend({
+        text: '',
+        submit: false,
+        ...signal !== undefined ? { signal } : {},
+      })
       const result = await operation.done
       if (result.waitReason === 'session_exit') throw new Error('PTY shell exited during startup')
       if (result.waitReason === 'timeout') throw new Error('PTY shell did not reach readiness before startup timeout')
@@ -378,6 +391,7 @@ export class LocalPtySession implements TerminalBackendSession {
   }
 
   private onData(data: string): void {
+    if (!this.closing) this.terminalEmulator?.write(data)
     const sanitized = this.sanitizer.push(data)
     this.appendOutput(sanitized.text)
     if (sanitized.prompt) {
@@ -400,9 +414,21 @@ export class LocalPtySession implements TerminalBackendSession {
 
   private async onExit(outcome: SubprocessOutcome): Promise<void> {
     await this.outputEnded.promise
+    this.terminalEmulator?.dispose()
     if (this.transportFailure !== undefined) return
     this.statusValue = { kind: 'exited', exitCode: outcome.exitCode, signal: outcome.signal }
     this.settleActive('session_exit')
+  }
+
+  private readonly onTerminalResponse = (data: string): void => {
+    this.terminalResponse = this.terminalResponse.then(async () => {
+      if (this.closing || this.statusValue.kind === 'exited') return
+      try {
+        await this.terminal.write(data)
+      } catch (error: unknown) {
+        this.onTransportFailure(error)
+      }
+    })
   }
 
   private onTransportFailure(error: unknown): void {
@@ -449,8 +475,16 @@ export class LocalPtySession implements TerminalBackendSession {
         return
       }
       const elapsed = Date.now() - operation.startedAt
-      const startupHasOutput = !this.initializing || this.scrollback.snapshot().text.length > 0
-      const acceptsStdinWait = startupHasOutput && foreground !== undefined
+      const startupText = this.scrollback.snapshot().text
+      // The bootstrap echo contains the prompt's source literal, not evidence
+      // that pwsh has executed it. A standalone final prompt also supports a
+      // constrained shell that cannot emit the Console-based OSC marker.
+      const startupHasOutput = !this.initializing || (this.config.shellDialect === 'pwsh'
+        ? startupText === CONTROLLED_PROMPT || startupText.endsWith(`\n${CONTROLLED_PROMPT}`)
+        : startupText.length > 0)
+      // PowerShell also reads stdin for terminal-query replies before executing
+      // queued input; that syscall is not command or interactive-child readiness.
+      const acceptsStdinWait = this.config.shellDialect === 'bash' && startupHasOutput && foreground !== undefined
         && operation.acceptsStdinWait(foreground.processGroupId, foreground.inputWaiting)
       if (elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {
         this.settleActive('stdin_read')
@@ -549,6 +583,7 @@ export class LocalPtySession implements TerminalBackendSession {
     // it as session_exit below, so an in-flight send is never mis-settled as
     // stdin_read/inferred_idle/timeout during the grace period.
     this.stopPolling()
+    this.terminalEmulator?.dispose()
     try {
       await this.terminal.terminate()
     } catch (error: unknown) {
@@ -556,6 +591,7 @@ export class LocalPtySession implements TerminalBackendSession {
     }
     // Quiescence is the active send's terminal outcome.
     this.settleActive('session_exit')
+    await this.terminalResponse
     await this.completion
     this.terminal.output.off('data', this.onTerminalData)
     this.terminal.output.off('end', this.onTerminalEnd)

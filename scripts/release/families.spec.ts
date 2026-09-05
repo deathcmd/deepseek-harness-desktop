@@ -41,6 +41,17 @@ afterEach(() => {
 })
 
 describe('release families', () => {
+  it('validates desktop tarballs with the same exact source entries as manifests', () => {
+    const desktop = member('apps/desktop', '@deepseek-ai/dsh-desktop')
+    const family = releaseFamily('dsh')
+    expect(() => {
+      family.validatePayload(desktop, ['package/src/main.mjs', 'package/src/runtime.mjs'])
+    }).not.toThrow()
+    expect(() => {
+      family.validatePayload(desktop, ['package/src/extra.mjs'])
+    }).toThrow('publishes source file')
+  })
+
   it('excludes private experimental packages from the dsh release', () => {
     const members = releaseFamily('dsh').members(resolve(import.meta.dirname, '../..'))
 

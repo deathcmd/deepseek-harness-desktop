@@ -14,6 +14,7 @@
   "main": "src/main.mjs",
   "files": [
     "src/main.mjs",
+    "src/runtime.mjs",
     "scripts/prepare-runtime.mjs",
     "resources"
   ],

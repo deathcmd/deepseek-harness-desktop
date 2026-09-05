@@ -1,5 +1,11 @@
 /** Publication payload policy shared by static manifests and packed tarballs. */
 
+/** Exact runtime or auditable source entries, never a whole source directory. */
+const publicationSourceAllowlist = new Map<string, ReadonlySet<string>>([
+  ['@deepseek-ai/node-addon-landlock-run', new Set(['src/main.c'])],
+  ['@deepseek-ai/dsh-desktop', new Set(['src/main.mjs', 'src/runtime.mjs'])],
+])
+
 /**
  * Whether a package manifest exports generated Host-for-Client metadata.
  * @param manifest - parsed package manifest to inspect.
@@ -28,10 +34,12 @@ function payloadPath(file: string): string {
  * resolves their source through the package link; a published map resolves
  * nothing, so no payload publishes one.
  * @param file - manifest path or tarball member to classify.
+ * @param packageName - owning package for explicit source-entry exceptions.
  * @returns whether publishing this path is forbidden.
  */
-export function isForbiddenPublicationFile(file: string): boolean {
+export function isForbiddenPublicationFile(file: string, packageName?: string): boolean {
   const normalized = payloadPath(file)
+  if (packageName !== undefined && publicationSourceAllowlist.get(packageName)?.has(normalized)) return false
   return normalized === 'src'
     || normalized.startsWith('src/')
     || normalized.endsWith('.d.ts.map')
@@ -39,13 +47,13 @@ export function isForbiddenPublicationFile(file: string): boolean {
 }
 
 /**
- * Reject source and map members in a packed npm tarball.
+ * Reject source and map members except the owning package's exact source entries.
  * @param files - tarball members to validate.
- * @param context - tarball identity named in the failure.
+ * @param context - owning package name, also named in the failure.
  */
 export function validateTarballPayload(files: readonly string[], context: string): void {
   for (const file of files) {
-    if (!isForbiddenPublicationFile(file)) continue
+    if (!isForbiddenPublicationFile(file, context)) continue
     const normalized = payloadPath(file)
     if (normalized === 'src' || normalized.startsWith('src/')) {
       throw new Error(`${context} publishes source file ${file}`)

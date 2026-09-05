@@ -27,7 +27,7 @@ export interface PackedIdentity {
  * @returns Every path inside the archive.
  */
 export function tarballFiles(tarball: string): string[] {
-  return capture('tar', ['-tzf', tarball]).split('\n').filter(line => line !== '')
+  return capture('tar', ['-tzf', tarball]).split(/\r?\n/).filter(line => line !== '')
 }
 
 /**
@@ -49,5 +49,5 @@ export function packedIdentity(tarball: string): PackedIdentity {
  * @returns Tarball filenames in upload order.
  */
 export function readPublishOrder(directory: string): string[] {
-  return readFileSync(join(directory, PUBLISH_ORDER_FILE), 'utf8').split('\n').filter(line => line !== '')
+  return readFileSync(join(directory, PUBLISH_ORDER_FILE), 'utf8').split(/\r?\n/).filter(line => line !== '')
 }

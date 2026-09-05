@@ -37,11 +37,6 @@ const publicLandlockPackages = new Set([
   '@deepseek-ai/node-addon-landlock-run-linux-arm64',
   '@deepseek-ai/node-addon-landlock-run-linux-x64',
 ])
-/** Deliberate source payloads whose exact bytes are part of the package's audit surface. */
-const publicationSourceAllowlist: Readonly<Record<string, readonly string[]>> = {
-  '@deepseek-ai/node-addon-landlock-run': ['src/main.c'],
-  '@deepseek-ai/dsh-desktop': ['src/main.mjs'],
-}
 const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.git'
 /**
  * Source home the published packages point consumers at. It differs from
@@ -62,7 +57,7 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   // The Web build emits sourcemaps for browser debugging; publishing them is
   // what the payload policy forbids, so the bundle ships without them.
   '@deepseek-ai/dsh-web-frontend': ['dist', '!dist/**/*.map'],
-  '@deepseek-ai/dsh-desktop': ['src/main.mjs', 'scripts/prepare-runtime.mjs', 'resources'],
+  '@deepseek-ai/dsh-desktop': ['src/main.mjs', 'src/runtime.mjs', 'scripts/prepare-runtime.mjs', 'resources'],
   '@deepseek-ai/dsh-desktop-runtime': [],
 }
 
@@ -309,9 +304,8 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
   }
 
   if (manifest.name?.startsWith('@deepseek-ai/')) {
-    const allowedSources = publicationSourceAllowlist[manifest.name] ?? []
     for (const file of manifest.files ?? []) {
-      if (isForbiddenPublicationFile(file) && !allowedSources.includes(file)) {
+      if (isForbiddenPublicationFile(file, manifest.name)) {
         errors.push(`${label}: package.json files must not publish ${JSON.stringify(file)}`)
       }
     }

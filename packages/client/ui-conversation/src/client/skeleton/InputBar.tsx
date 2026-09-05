@@ -217,6 +217,9 @@ export function InputBar({
   useEffect(() => {
     const el = inputRef.current
     if (locked || el === null) return
+    // Session creation may finish behind a modal whose path edit cancels on
+    // blur. The modal owns focus until it closes, even during a session swap.
+    if (el.ownerDocument.querySelector('[aria-modal="true"]') !== null) return
     el.focus({ preventScroll: true })
     revealSelectionFocus(el)
   }, [locked, sessionId])
