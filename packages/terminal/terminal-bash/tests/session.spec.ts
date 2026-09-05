@@ -216,6 +216,25 @@ describe('LocalPtySession readiness and output', () => {
     expect(operation.cancel()).toBe(false)
   })
 
+  it('does not mistake a PowerShell terminal-query read for command readiness', async () => {
+    vi.useFakeTimers()
+    const terminal = new FakeTerminal()
+    const session = new LocalPtySession(terminal, config({ shellDialect: 'pwsh' }))
+    await initialize(session, terminal)
+    const operation = session.startSend({ text: 'Get-Date', submit: true })
+    let settled = false
+    void operation.done.then(() => { settled = true })
+    await vi.advanceTimersByTimeAsync(0)
+    terminal.inspector.waiting = true
+    terminal.emitData('\x1b[6n')
+    await vi.advanceTimersByTimeAsync(30)
+    expect(settled).toBe(false)
+    terminal.emitData('completed\r\n\x1b]133;D;0\x07dsh> ')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(await operation.done).toMatchObject({ waitReason: 'stdin_read', viewport: 'completed\ndsh> ' })
+    await session.close('test complete')
+  })
+
   it('does not reuse a pre-write stdin wait as post-write readiness', async () => {
     vi.useFakeTimers()
     const terminal = new FakeTerminal()

@@ -24,7 +24,7 @@ harness 在 Windows 上没有持久 shell。持久 `bash` 栈按构造就是 POS
 
 ### `@deepseek-ai/dsh-terminal-bash` 的 shell 方言
 
-一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`，存量部署逐字节不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 通过后端自有的 `-NoExit -EncodedCommand` 参数安装 prompt 函数与编码前缀，避免控制台初始化前的 stdin 回显与规范模式换行转换。仅保留视口的[无界面终端](https://github.com/xtermjs/xterm.js/blob/master/typings/xterm-headless.d.ts)回应 PowerShell 与 PSReadLine 即使在 `TERM=dumb` 下仍会发出的光标位置查询。回应使用既有子进程句柄，纳入错误传播与清理。启动保留同一个绝对期限；输出引用提示符源码不能证明就绪；会话会等待 OSC 标记与精确的可打印尾部，或者先确认独占末行的提示符再接受无标记就绪。`session_exit` 或 `timeout` 结算会拒绝 spawn，不会续期或重新提交引导命令。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 sanitizer、`PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑原样复用——标记仍只是就绪信号、载荷不被消费，与 bash 路径完全一致，且没有新增模型通知通道（与当前实现对齐；延后的 BEL 事件通道保持延后）。
+一个 backend、两种方言：`shellDialect: 'bash' | 'pwsh'`（默认 `'bash'`，存量部署逐字节不变）。有效 `shellPath`/`shellArgs` 按方言解析（bash `/bin/bash --noprofile --norc -i`；pwsh 经共享的 `dsh-pwsh-local` 解析器取 `-NoLogo -NoProfile`，保留交互宿主供子 REPL）。子环境去掉 bash 专属 `PS1`/`PROMPT_COMMAND` 标记并为 pwsh 加 `NO_COLOR`。pwsh 通过后端自有的 `-NoExit -EncodedCommand` 参数安装 prompt 函数与编码前缀，避免控制台初始化前的 stdin 回显与规范模式换行转换。仅保留视口的[无界面终端](https://github.com/xtermjs/xterm.js/blob/master/typings/xterm-headless.d.ts)回应 PowerShell 与 PSReadLine 即使在 `TERM=dumb` 下仍会发出的光标位置查询。回应使用既有子进程句柄，纳入错误传播与清理。Linux 的 stdin-wait 系统调用可能表示该控制台查询，而不是已准备好接收新命令；因此 pwsh 在各平台均使用提示符与静默证据，bash 则保留精确系统调用档。启动保留同一个绝对期限；输出引用提示符源码不能证明就绪；会话会等待 OSC 标记与精确的可打印尾部，或者先确认独占末行的提示符再接受无标记就绪。`session_exit` 或 `timeout` 结算会拒绝 spawn，不会续期或重新提交引导命令。两种方言发出相同的 BEL 终结 OSC `133;D;` 标记，因此 sanitizer、`PROMPT_MARKER_PREFIX`、`CONTROLLED_PROMPT` 与精确尾部就绪逻辑原样复用——标记仍只是就绪信号、载荷不被消费，与 bash 路径完全一致，且没有新增模型通知通道（与当前实现对齐；延后的 BEL 事件通道保持延后）。
 
 ### `@deepseek-ai/dsh-tool-pwsh-persistent`
 
@@ -57,7 +57,7 @@ terminal-bash 的配置、生命周期与 sanitizer 套件会在 Windows 上运�
 
 **Windows 覆盖包含共享终端后端。** `terminal-bash` 与 `tool-pwsh-persistent` 会在 Windows 上运行平台无关套件与真实 pwsh 场景。提示符源码拒绝、无提示符期限、分块光标查询、回应失败与在途回应清理用例覆盖启动及协议所有权；真实 pwsh 还会保留 `Read-Host` 输入；完整 Loader 与 ACP 场景保留模型可见输出检查。
 
-**Windows 就绪弱于 Linux。** 伪 pgid marker 快路径覆盖 shell 提示符，但没有提示符的子进程按静默档结算（约 3s），与 macOS 完全一致；没有精确的 stdin-wait 档。
+**PowerShell 在各宿主上均使用提示符与静默判定就绪。** marker 快路径覆盖 shell 提示符；无标记的交互输入在配置的静默期限结算。Linux 的精确 stdin-wait 档仍供 bash 使用。
 
 **Windows 的拆卸与信号不同于 POSIX。** 不带 `/F` 的 taskkill 无法终止控制台进程（TERM 档是 `/F` 升级前的宽限等待）、SIGINT 是控制台级 Ctrl-C、SIGTSTP/SIGHUP 不可用，且被外部 taskkill 的 shell 可能不触发 node-pty 的退出通知——句柄改从验证的消失状态结算。
 

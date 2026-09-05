@@ -482,7 +482,9 @@ export class LocalPtySession implements TerminalBackendSession {
       const startupHasOutput = !this.initializing || (this.config.shellDialect === 'pwsh'
         ? startupText === CONTROLLED_PROMPT || startupText.endsWith(`\n${CONTROLLED_PROMPT}`)
         : startupText.length > 0)
-      const acceptsStdinWait = startupHasOutput && foreground !== undefined
+      // PowerShell also reads stdin for terminal-query replies before executing
+      // queued input; that syscall is not command or interactive-child readiness.
+      const acceptsStdinWait = this.config.shellDialect === 'bash' && startupHasOutput && foreground !== undefined
         && operation.acceptsStdinWait(foreground.processGroupId, foreground.inputWaiting)
       if (elapsed >= this.config.exactProbeAfterMs && acceptsStdinWait) {
         this.settleActive('stdin_read')

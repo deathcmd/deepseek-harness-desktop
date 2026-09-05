@@ -279,13 +279,15 @@ const hasPwsh = spawnSync(
   { encoding: 'utf8' },
 ).status === 0
 
+// Use the deployed silence budget: first-use PowerShell cmdlet imports can
+// exceed the fast Bash fixture's subsecond fallback without completing a command.
 describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
   it('bootstraps a persistent pwsh, persists state, and scrubs secrets', async () => {
     const previous = process.env.DSH_TEST_SECRET
     process.env.DSH_TEST_SECRET = 'must-not-leak'
     try {
       const { ctx, root, agent } = await harness('danger-full-access', {
-        idleSilenceMs: 300,
+        idleSilenceMs: 3_000,
         handoffGraceMs: 300,
         timeoutMs: 8_000,
       }, 'pwsh')
@@ -317,7 +319,7 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
 
   it('keeps Read-Host interactive after the argv bootstrap', async () => {
     const { ctx, agent } = await harness('danger-full-access', {
-      idleSilenceMs: 300,
+      idleSilenceMs: 3_000,
       handoffGraceMs: 300,
       timeoutMs: 8_000,
     }, 'pwsh')
@@ -338,7 +340,7 @@ describe.skipIf(!hasPwsh)('terminal-bash pwsh real shell', () => {
 
   it('pins UTF-8 output encoding so non-ASCII output survives the byte decode', async () => {
     const { ctx, root, agent } = await harness('danger-full-access', {
-      idleSilenceMs: 300,
+      idleSilenceMs: 3_000,
       handoffGraceMs: 300,
       timeoutMs: 8_000,
     }, 'pwsh')
