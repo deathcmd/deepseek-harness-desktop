@@ -676,15 +676,23 @@ describe('DeepSeekAdapter against a mock server', () => {
   it('keeps an idle provider read alive through SSE comments', async () => {
     vi.useFakeTimers()
     const encoder = new TextEncoder()
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      const signal = init?.signal
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
-          setTimeout(() => { controller.enqueue(encoder.encode(': keep-alive\n\n')) }, 75)
-          setTimeout(() => { controller.enqueue(encoder.encode(': keep-alive\n\n')) }, 150)
-          setTimeout(() => {
+          const timers: ReturnType<typeof setTimeout>[] = []
+          const onAbort = (): void => {
+            for (const timer of timers) clearTimeout(timer)
+            controller.error(signal?.reason)
+          }
+          signal?.addEventListener('abort', onAbort, { once: true })
+          timers.push(setTimeout(() => { controller.enqueue(encoder.encode(': keep-alive\n\n')) }, 75))
+          timers.push(setTimeout(() => { controller.enqueue(encoder.encode(': keep-alive\n\n')) }, 150))
+          timers.push(setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort)
             controller.enqueue(encoder.encode(textEvents.map(event => `data: ${event}\n\n`).join('')))
             controller.close()
-          }, 225)
+          }, 225))
         },
       })
       return Promise.resolve(new Response(body, { status: 200 }))
@@ -697,10 +705,11 @@ describe('DeepSeekAdapter against a mock server', () => {
           chunks.push(chunk.type)
         }
       })()
+      const failure = drain.catch((error: unknown) => error)
       await vi.advanceTimersByTimeAsync(75)
       await vi.advanceTimersByTimeAsync(75)
       await vi.advanceTimersByTimeAsync(75)
-      await expect(drain).resolves.toBeUndefined()
+      expect(await failure).toBeUndefined()
       expect(chunks).toEqual(['block-start', 'text-delta', 'block-end', 'usage', 'finish'])
     } finally {
       fetchSpy.mockRestore()
