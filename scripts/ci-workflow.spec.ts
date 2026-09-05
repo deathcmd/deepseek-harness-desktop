@@ -5,8 +5,50 @@ import { describe, expect, it } from 'vitest'
 
 const root = resolve(import.meta.dirname, '..')
 const runnerPrivatePnpmDestination = '${{ runner.temp }}/setup-pnpm'
+const upstreamRepository = 'deepseek-harness/deepseek-harness'
+const upstreamOnly = `github.repository == '${upstreamRepository}'`
 
 describe('CI workflow', () => {
+  it.each([
+    ['node-24', 'LINUX', '["self-hosted", "linux", "x64", "vm-backup"]', 'dsh-ubuntu-24-04-16core', 'ubuntu-latest'],
+    ['node-24-coverage', 'LINUX', '["self-hosted", "linux", "x64", "vm-backup"]', 'dsh-ubuntu-24-04-16core', 'ubuntu-latest'],
+    ['node-24-consumers', 'LINUX', '["self-hosted", "linux", "x64", "vm-backup"]', 'dsh-ubuntu-24-04-16core', 'ubuntu-latest'],
+    ['windows-native', 'WINDOWS', '["self-hosted", "dsh-win-ci", "windows"]', 'dsh-windows-2025-16core', 'windows-2025'],
+    ['all-checks-passed', 'LINUX', '["self-hosted", "linux", "x64", "vm-backup"]', 'ubuntu-latest', 'ubuntu-latest'],
+  ])('keeps %s on standard capacity outside the configured upstream', (name, platform, selfHosted, hosted, portable) => {
+    const job = workflowJob(loadWorkflow('.github/workflows/ci.yml'), name)
+    expect(String(job['runs-on']).replace(/\s+/g, ' ')).toBe(
+      `\${{ github.repository != '${upstreamRepository}' && '${portable}' || vars.DSH_CI_FAILOVER_${platform} == 'selfhosted' && github.event.pull_request.user.login != 'dependabot[bot]' && fromJSON('${selfHosted}') || '${hosted}' }}`,
+    )
+  })
+
+  it('bounds fork workers without dropping required checks or hosted browser dependencies', () => {
+    const workflow = loadWorkflow('.github/workflows/ci.yml')
+    const budgets = {
+      'node-24': { DSH_GATE_CONCURRENCY: ['8', '1'] },
+      'node-24-coverage': { DSH_COVERAGE_MAX_WORKERS: ['6', '2'], DSH_COVERAGE_PARTITIONS: ['4', '1'], DSH_GATE_CONCURRENCY: ['3', '1'] },
+      'node-24-consumers': { DSH_GATE_CONCURRENCY: ['8', '1'], DSH_OXLINT_THREADS: ['8', '2'], DSH_PUBLINT_CONCURRENCY: ['8', '2'], DSH_WEB_SNAPSHOT_WORKERS: ['6', '2'] },
+      'windows-native': { DSH_COVERAGE_MAX_WORKERS: ['6', '2'], DSH_COVERAGE_PARTITIONS: ['8', '1'], DSH_GATE_CONCURRENCY: ['4', '1'], DSH_PUBLINT_CONCURRENCY: ['8', '2'] },
+    }
+    for (const [name, budget] of Object.entries(budgets)) {
+      const job = workflowJob(workflow, name)
+      for (const [key, [upstream, portable]] of Object.entries(budget)) {
+        expect(job.env).toHaveProperty(key, `\${{ ${upstreamOnly} && '${upstream}' || '${portable}' }}`)
+      }
+    }
+    const consumers = workflowJob(workflow, 'node-24-consumers')
+    expect(consumers.env).toHaveProperty('DSH_SNAPSHOT_MAX_CONCURRENCY',
+      `\${{ github.repository != '${upstreamRepository}' && '2' || vars.DSH_CI_FAILOVER_LINUX == 'selfhosted' && github.event.pull_request.user.login != 'dependabot[bot]' && '12' || '32' }}`)
+    if (!Array.isArray(consumers.steps)) throw new TypeError('Consumer job must define steps')
+    const steps = consumers.steps.filter(isRecord)
+    expect(steps.find(step => step.name === 'Install Playwright Chromium and hosted dependencies')?.if)
+      .toBe("runner.environment != 'self-hosted'")
+    expect(steps.find(step => step.name === 'Install Playwright Chromium on the failover VM')?.if)
+      .toBe("runner.environment == 'self-hosted'")
+    expect(workflowJob(workflow, 'all-checks-passed').needs)
+      .toEqual(['node-24', 'node-24-coverage', 'node-24-consumers', 'node-compat', 'python-sdk', 'python-runtime', 'windows'])
+  })
+
   it('isolates every pnpm action setup destination per runner', () => {
     const workflow: unknown = yaml.load(readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8'))
     if (!isRecord(workflow) || !isRecord(workflow.jobs)) throw new TypeError('CI workflow must define jobs')
@@ -85,7 +127,7 @@ describe('CI workflow', () => {
     expect(wineAptCache['runs-on']).toBe('ubuntu-latest')
 
     // serial-windows: master-only standby, self-hosted, non-blocking.
-    expect(serialWindows.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
+    expect(serialWindows.if).toBe(`${upstreamOnly} && github.event_name == 'push' && github.ref == 'refs/heads/master'`)
     expect(serialWindows['runs-on']).toEqual(['self-hosted', 'dsh-win-ci', 'windows'])
     expect(serialWindows.name).toBe('serial / windows (self-hosted standby)')
 
@@ -132,7 +174,7 @@ describe('CI workflow', () => {
       if (!isRecord(job)) throw new TypeError(`${name} must be defined`)
       expect(job.concurrency).toBeUndefined()
       // Both stay master-push-only; that is what makes the push carve-out safe.
-      expect(job.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
+      expect(job.if).toBe(`${upstreamOnly} && github.event_name == 'push' && github.ref == 'refs/heads/master'`)
     }
 
     // What bounds the cost of exempting push: a master push may only carry the
@@ -146,8 +188,8 @@ describe('CI workflow', () => {
     const NOT_PUSH_REACHABLE = new Set([
       "github.event_name == 'pull_request'",
       "always() && github.event_name == 'pull_request'",
-      "github.event_name == 'workflow_dispatch' && inputs.suite == 'larger-runner-benchmark'",
-      "github.event_name == 'workflow_dispatch' && inputs.suite == 'consolidated-runner-benchmark'",
+      `${upstreamOnly} && github.event_name == 'workflow_dispatch' && inputs.suite == 'larger-runner-benchmark'`,
+      `${upstreamOnly} && github.event_name == 'workflow_dispatch' && inputs.suite == 'consolidated-runner-benchmark'`,
     ])
     const pushReachable = Object.entries(workflow.jobs)
       .filter(([, job]) => {
@@ -400,6 +442,11 @@ describe('Python release workflows', () => {
 })
 
 describe('Issue lifecycle workflow', () => {
+  it('does not request upstream project access from another repository', () => {
+    const policy = workflowJob(loadWorkflow('.github/workflows/issue-policy.yml'), 'policy')
+    expect(policy.if).toBe(upstreamOnly)
+  })
+
   it('uses explicit review handoff events without rerunning when a draft becomes ready', () => {
     const lifecycle = loadWorkflow('.github/workflows/issue-lifecycle.yml')
     const lifecyclePullRequest = workflowEvent(lifecycle, 'pull_request')
@@ -412,7 +459,7 @@ describe('Issue lifecycle workflow', () => {
     expect(lifecyclePullRequest.types).toContain('review_requested')
     expect(lifecycleReview.types).toEqual(['submitted'])
     expect(lifecycleJob.if).toBe(
-      "${{ github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested') }}",
+      `\${{ ${upstreamOnly} && (github.event_name != 'pull_request_review' || (github.event.action == 'submitted' && github.event.review.state == 'changes_requested')) }}`,
     )
     expect(policyPullRequest.types).toContain('ready_for_review')
   })

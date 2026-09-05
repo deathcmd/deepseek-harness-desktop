@@ -12,6 +12,8 @@ A monotonic projection also cannot return an automation-owned Issue from `In rev
 
 ## Decision
 
+This decision governs the configured upstream repository. Other repository copies use the [fork isolation rules](2026-09-06-fork-ci-isolation.md).
+
 The Issue lifecycle workflow treats review webhooks as commands. `pull_request.review_requested`, including a repeated request, targets `In review`. `pull_request_review.submitted` targets `In progress` only when `review.state` is `changes_requested`; the submitted event remains necessary because a reviewer can request changes without an earlier review-request event. Approved and commented submissions skip their lifecycle job before it creates a Project token, while dismissed reviews are not subscribed.
 
 Ordinary subscribed pull-request events remain forward-only implementation signals: they can move `Inbox`, `Backlog`, or `Ready` to `In progress`, but they cannot move `In review` backward. Review-request commands can move any earlier active status to `In review`. Changes-requested commands can move earlier active statuses forward to `In progress` and can move `In review` back only when the latest status event for the target Project was written by the configured lifecycle actor. A human or unknown latest actor preserves the current status.
